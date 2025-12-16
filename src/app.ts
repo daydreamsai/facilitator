@@ -10,11 +10,19 @@ import type {
   VerifyResponse,
 } from "@x402/core/types";
 
+import { logger } from "@bogeychan/elysia-logger";
+
 import { facilitator } from "./facilitatorCore.js";
 import { uptoSweeper } from "./upto/index.js";
 
 // Elysia app (Node adapter for Node.js runtime)
 export const app = new Elysia({ adapter: node() })
+  .use(
+    logger({
+      autoLogging: true,
+      level: "info",
+    })
+  )
   .use(
     opentelemetry({
       serviceName: process.env.OTEL_SERVICE_NAME ?? "x402-facilitator",

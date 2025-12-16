@@ -11,9 +11,13 @@
     "build": "tsc",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage"
   },
   "dependencies": {
+    "@bogeychan/elysia-logger": "^0.1.10",
     "@elysiajs/node": "^1.0.0",
     "@elysiajs/opentelemetry": "^1.4.9",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.208.0",
