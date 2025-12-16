@@ -3,6 +3,8 @@ import {
   decodePaymentResponseHeader,
   encodePaymentSignatureHeader,
 } from "@x402/core/http";
+import { x402Client, x402HTTPClient } from "@x402/core/client";
+import { registerExactEvmScheme } from "@x402/evm/exact/client";
 import type {
   PaymentPayload,
   PaymentRequired,
@@ -23,6 +25,11 @@ if (!CLIENT_EVM_PRIVATE_KEY) {
 
 const account = privateKeyToAccount(CLIENT_EVM_PRIVATE_KEY as `0x${string}`);
 console.log("payer", account.address);
+
+// Create x402 HTTP client for exact scheme payments
+const x402 = new x402Client();
+registerExactEvmScheme(x402, { signer: account });
+const httpClient = new x402HTTPClient(x402);
 
 const publicClient = createPublicClient({
   chain: base,
@@ -181,7 +188,7 @@ async function createUptoPaymentPayload(
   return paymentPayload;
 }
 
-async function fetchWithUpto(
+async function fetchWithPayment(
   path: string,
   paymentHeader?: string
 ): Promise<Response> {
@@ -191,19 +198,84 @@ async function fetchWithUpto(
   });
 }
 
-async function main() {
+// ============================================================================
+// Exact Scheme Test
+// ============================================================================
+
+async function testExactScheme() {
+  console.log("\n=== Testing Exact Scheme ===");
+  const path = "/api/premium";
+
+  // First request - should get 402
+  let res = await fetchWithPayment(path);
+  if (res.status !== 402) {
+    console.error("Expected 402, got", res.status);
+    return false;
+  }
+
+  const paymentRequired = httpClient.getPaymentRequiredResponse(
+    (name) => res.headers.get(name),
+    await res.clone().json().catch(() => null)
+  );
+
+  console.log("Payment required:", {
+    scheme: paymentRequired.accepts[0]?.scheme,
+    network: paymentRequired.accepts[0]?.network,
+    amount: paymentRequired.accepts[0]?.amount,
+  });
+
+  // Create payment payload using x402 client
+  const paymentPayload = await httpClient.createPaymentPayload(paymentRequired);
+  const headers = httpClient.encodePaymentSignatureHeader(paymentPayload);
+  const paymentHeader = headers["PAYMENT-SIGNATURE"] || headers["X-PAYMENT"];
+
+  // Retry with payment
+  res = await fetchWithPayment(path, paymentHeader);
+  if (!res.ok) {
+    console.error("Exact payment failed:", res.status, await res.text());
+    return false;
+  }
+
+  const data = await res.json();
+  console.log("Exact scheme response:", data);
+
+  // Check for settlement response (optional - may not be present)
+  try {
+    const settleResponse = httpClient.getPaymentSettleResponse((name) =>
+      res.headers.get(name)
+    );
+    console.log("Settlement response:", settleResponse);
+  } catch {
+    // Settlement header is optional
+    const txHeader = res.headers.get("X-PAYMENT-RESPONSE") || res.headers.get("PAYMENT-RESPONSE");
+    if (txHeader) {
+      console.log("Settlement header:", txHeader);
+    } else {
+      console.log("No settlement response header (payment verified, settlement async)");
+    }
+  }
+
+  return true;
+}
+
+// ============================================================================
+// Upto Scheme Test
+// ============================================================================
+
+async function testUptoScheme() {
+  console.log("\n=== Testing Upto Scheme ===");
   const path = "/api/upto-premium";
   let paymentHeader: string | undefined;
   let sessionId: string | undefined;
 
   // Make a few requests to accrue spend.
   for (let i = 0; i < 3; i++) {
-    let res = await fetchWithUpto(path, paymentHeader);
+    let res = await fetchWithPayment(path, paymentHeader);
     if (res.status === 402) {
       const requiredHeader = res.headers.get("PAYMENT-REQUIRED");
       if (!requiredHeader) {
         console.error("402 without PAYMENT-REQUIRED header:", await res.text());
-        process.exit(1);
+        return false;
       }
 
       const paymentRequired = decodePaymentRequiredHeader(
@@ -214,21 +286,21 @@ async function main() {
       paymentHeader = encodePaymentSignatureHeader(payload);
 
       // retry this iteration with payment
-      res = await fetchWithUpto(path, paymentHeader);
+      res = await fetchWithPayment(path, paymentHeader);
     }
 
     if (!res.ok) {
       console.error("Request failed", res.status, await res.text());
-      process.exit(1);
+      return false;
     }
 
     sessionId = res.headers.get("x-upto-session-id") ?? sessionId;
-    console.log("premium response", i + 1, await res.json());
+    console.log("Upto response", i + 1, await res.json());
   }
 
   if (!sessionId) {
     console.error("No session id returned; did payment succeed?");
-    return;
+    return false;
   }
 
   console.log("sessionId", sessionId);
@@ -258,6 +330,35 @@ async function main() {
       decodePaymentResponseHeader(paymentResponseHeader)
     );
   }
+
+  return true;
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+async function main() {
+  console.log("=== x402 Smoke Test ===");
+  console.log("Payer:", account.address);
+
+  // Test exact scheme (single payment per request)
+  const exactOk = await testExactScheme();
+  if (!exactOk) {
+    console.error("\n❌ Exact scheme test failed");
+    process.exit(1);
+  }
+  console.log("✅ Exact scheme test passed");
+
+  // Test upto scheme (batched payments)
+  const uptoOk = await testUptoScheme();
+  if (!uptoOk) {
+    console.error("\n❌ Upto scheme test failed");
+    process.exit(1);
+  }
+  console.log("✅ Upto scheme test passed");
+
+  console.log("\n=== All tests passed ===");
 }
 
 main().catch((err) => {
