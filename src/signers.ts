@@ -8,8 +8,11 @@ import { base } from "viem/chains";
 
 import { EVM_PRIVATE_KEY, SVM_PRIVATE_KEY } from "./config.js";
 
-// Initialize the EVM account from private key
-export const evmAccount = privateKeyToAccount(EVM_PRIVATE_KEY as `0x${string}`);
+const normalizedEvmKey = EVM_PRIVATE_KEY?.startsWith("0x")
+  ? EVM_PRIVATE_KEY
+  : `0x${EVM_PRIVATE_KEY}`;
+
+export const evmAccount = privateKeyToAccount(normalizedEvmKey as `0x${string}`);
 console.info(`EVM Facilitator account: ${evmAccount.address}`);
 
 // Initialize the SVM account from private key

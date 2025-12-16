@@ -14,7 +14,7 @@ import type { PaymentPayload } from "@x402/core/types";
 import { evmAccount, svmAccount } from "../src/signers.js";
 import { settleUptoSession } from "../src/upto/settlement.js";
 import { InMemoryUptoSessionStore, type UptoSession } from "../src/upto/sessionStore.js";
-import node from "@elysiajs/node";
+import { node } from "@elysiajs/node";
 
 const FACILITATOR_URL =
   process.env.FACILITATOR_URL ??
