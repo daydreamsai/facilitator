@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-export const PORT = parseInt(process.env.PORT || "4022", 10);
+export const PORT = parseInt(process.env.PORT || "8090", 10);
 
 export const EVM_PRIVATE_KEY = process.env.EVM_PRIVATE_KEY;
 export const SVM_PRIVATE_KEY = process.env.SVM_PRIVATE_KEY;

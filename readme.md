@@ -21,7 +21,7 @@ and fill required environment variables:
 
 - `EVM_PRIVATE_KEY` - Ethereum private key
 - `SVM_PRIVATE_KEY` - Solana private key
-- `PORT` - facilitator server port (optional, defaults to 4022). If you also run `examples/paidApi.ts` on 4022, set this to something else (e.g. 8090).
+- `PORT` - facilitator server port (optional, defaults to 8090). If you also run `examples/paidApi.ts` on 8090, set this to something else (e.g. 4022).
 - `FACILITATOR_URL` (optional) - override the facilitator URL used by `examples/paidApi.ts` (defaults to `http://localhost:$PORT`)
 
 2. Install and build all packages from the typescript examples root:
