@@ -1,11 +1,11 @@
 /**
- * @x402/facilitator/signers - Signer adapters for x402 facilitators
+ * @daydreamsai/facilitator/signers - Signer adapters for x402 facilitators
  *
  * This module exports signer adapters for different wallet/key management systems.
  *
  * @example
  * ```typescript
- * import { createCdpEvmSigner } from "@x402/facilitator/signers/cdp";
+ * import { createCdpEvmSigner } from "@daydreamsai/facilitator/signers/cdp";
  * import { CdpClient } from "@coinbase/cdp-sdk";
  *
  * const cdp = new CdpClient();

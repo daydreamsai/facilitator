@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { createResourceServer } from "@x402/facilitator/server";
+ * import { createResourceServer } from "@daydreamsai/facilitator/server";
  * import { HTTPFacilitatorClient } from "@x402/core/http";
  *
  * const facilitatorClient = new HTTPFacilitatorClient({ url: "http://localhost:8090" });
@@ -46,7 +46,7 @@ export interface ResourceServerConfig {
  *
  * @example
  * ```typescript
- * import { createResourceServer } from "@x402/facilitator/server";
+ * import { createResourceServer } from "@daydreamsai/facilitator/server";
  * import { HTTPFacilitatorClient } from "@x402/core/http";
  *
  * const client = new HTTPFacilitatorClient({ url: process.env.FACILITATOR_URL });

@@ -70,8 +70,8 @@ export interface FacilitatorConfig {
  *
  * @example
  * ```typescript
- * import { createFacilitator } from "@x402/facilitator";
- * import { createCdpEvmSigner } from "@x402/facilitator/signers/cdp";
+ * import { createFacilitator } from "@daydreamsai/facilitator";
+ * import { createCdpEvmSigner } from "@daydreamsai/facilitator/signers/cdp";
  *
  * const signer = createCdpEvmSigner({ ... });
  * const facilitator = createFacilitator({

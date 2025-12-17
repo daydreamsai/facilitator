@@ -1,13 +1,13 @@
 /**
- * @x402/facilitator - x402 Payment Facilitator Library
+ * @daydreamsai/facilitator - x402 Payment Facilitator Library
  *
  * This module exports the core facilitator setup and types for building
  * x402 payment facilitators with custom signers.
  *
  * @example
  * ```typescript
- * import { createFacilitator } from "@x402/facilitator";
- * import { createCdpEvmSigner } from "@x402/facilitator/signers/cdp";
+ * import { createFacilitator } from "@daydreamsai/facilitator";
+ * import { createCdpEvmSigner } from "@daydreamsai/facilitator/signers/cdp";
  *
  * const signer = createCdpEvmSigner({ ... });
  * const facilitator = createFacilitator({

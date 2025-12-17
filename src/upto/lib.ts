@@ -1,5 +1,5 @@
 /**
- * @x402/facilitator/upto - Upto (batched payment) scheme components
+ * @daydreamsai/facilitator/upto - Upto (batched payment) scheme components
  *
  * This module exports components for implementing the "upto" payment scheme,
  * which allows batched payments with a pre-authorized spending cap.
@@ -10,7 +10,7 @@
  *   InMemoryUptoSessionStore,
  *   createUptoSweeper,
  *   settleUptoSession,
- * } from "@x402/facilitator/upto";
+ * } from "@daydreamsai/facilitator/upto";
  *
  * const store = new InMemoryUptoSessionStore();
  * const sweeper = createUptoSweeper({ store, facilitatorClient });
@@ -26,13 +26,7 @@ export {
 } from "./store.js";
 
 // Settlement
-export {
-  settleUptoSession,
-  type UptoFacilitatorClient,
-} from "./settlement.js";
+export { settleUptoSession, type UptoFacilitatorClient } from "./settlement.js";
 
 // Sweeper (Elysia plugin for auto-settlement)
-export {
-  createUptoSweeper,
-  type UptoSweeperConfig,
-} from "./sweeper.js";
+export { createUptoSweeper, type UptoSweeperConfig } from "./sweeper.js";

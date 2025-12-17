@@ -1,19 +1,18 @@
 import { Hono } from "hono";
 import { paymentMiddleware } from "@x402/hono";
 import { createHash } from "node:crypto";
-import { ExactEvmScheme } from "@x402/evm/exact/server";
-import { ExactSvmScheme } from "@x402/svm/exact/server";
+
 import { evmAccount, svmAccount } from "../src/signers/index.js";
 import {
   createResourceServer,
   HTTPFacilitatorClient,
   UptoEvmServerScheme,
-} from "@x402/facilitator/server";
+} from "@daydreamsai/facilitator";
 import {
   InMemoryUptoSessionStore,
   settleUptoSession,
   type UptoSession,
-} from "@x402/facilitator/upto";
+} from "@daydreamsai/facilitator";
 import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
 
 const facilitatorUrl = process.env.FACILITATOR_URL ?? "http://localhost:8090";

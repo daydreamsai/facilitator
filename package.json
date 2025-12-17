@@ -1,5 +1,5 @@
 {
-  "name": "@x402/facilitator",
+  "name": "@daydreamsai/facilitator",
   "version": "2.0.0",
   "description": "x402 Payment Facilitator - Verify and settle x402 payments with custom signers",
   "type": "module",

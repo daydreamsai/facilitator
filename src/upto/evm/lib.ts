@@ -1,5 +1,5 @@
 /**
- * @x402/facilitator/upto/evm - EVM-specific Upto scheme components
+ * @daydreamsai/facilitator/upto/evm - EVM-specific Upto scheme components
  *
  * This module exports EVM-specific implementations of the upto scheme
  * for both facilitators and resource servers.
@@ -7,11 +7,11 @@
  * @example
  * ```typescript
  * // Facilitator side
- * import { registerUptoEvmScheme } from "@x402/facilitator/upto/evm";
+ * import { registerUptoEvmScheme } from "@daydreamsai/facilitator/upto/evm";
  * registerUptoEvmScheme(facilitator, { signer, networks: "eip155:8453" });
  *
  * // Resource server side
- * import { UptoEvmServerScheme } from "@x402/facilitator/upto/evm";
+ * import { UptoEvmServerScheme } from "@daydreamsai/facilitator/upto/evm";
  * resourceServer.register("eip155:*", new UptoEvmServerScheme());
  * ```
  */
