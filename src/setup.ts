@@ -187,13 +187,20 @@ async function createDefaultSigners(): Promise<{
     return { evmSigners, svmSigners: [] };
   } else {
     // Private Key Signer (fallback)
-    const { evmSigner, svmSigner } = await import("./signers/index.js");
+    // Create separate signers for each network to ensure correct RPC/chain configuration
+    const { baseSigner, baseSepoliaSigner, svmSigner } = await import("./signers/index.js");
 
     return {
       evmSigners: [
         {
-          signer: evmSigner,
-          networks: ["eip155:8453", "eip155:84532"],
+          signer: baseSigner,
+          networks: "eip155:8453", // Base mainnet
+          schemes: ["exact", "upto"],
+          deployERC4337WithEIP6492: true,
+        },
+        {
+          signer: baseSepoliaSigner,
+          networks: "eip155:84532", // Base Sepolia
           schemes: ["exact", "upto"],
           deployERC4337WithEIP6492: true,
         },
@@ -221,24 +228,4 @@ const defaultSigners = await createDefaultSigners();
  */
 export const facilitator = createFacilitator({
   ...defaultSigners,
-  hooks: {
-    onBeforeVerify: async (context) => {
-      console.log("Before verify", context);
-    },
-    onAfterVerify: async (context) => {
-      console.log("After verify", context);
-    },
-    onVerifyFailure: async (context) => {
-      console.log("Verify failure", context);
-    },
-    onBeforeSettle: async (context) => {
-      console.log("Before settle", context);
-    },
-    onAfterSettle: async (context) => {
-      console.log("After settle", context);
-    },
-    onSettleFailure: async (context) => {
-      console.log("Settle failure", context);
-    },
-  },
 });

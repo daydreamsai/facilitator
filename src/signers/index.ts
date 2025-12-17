@@ -1,5 +1,13 @@
 // Default signers (from environment variables)
-export { evmSigner, svmSigner, evmAccount, svmAccount } from "./default.js";
+export {
+  evmSigner,
+  baseSigner,
+  baseSepoliaSigner,
+  svmSigner,
+  evmAccount,
+  svmAccount,
+  viemClient,
+} from "./default.js";
 
 // CDP signer adapter
 export {
