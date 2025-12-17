@@ -1,5 +1,7 @@
 # x402 Facilitator
 
+> **Warning**: This project is currently in alpha. APIs may change without notice and should not be used in production environments without thorough testing.
+
 A production-ready payment settlement service for the [x402 protocol](https://github.com/coinbase/x402). Built with Elysia and Node.js, it verifies cryptographic payment signatures and settles transactions on-chain for EVM (Base) and SVM (Solana) networks.
 
 ## Table of Contents
