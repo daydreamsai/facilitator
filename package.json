@@ -1,14 +1,50 @@
 {
-  "name": "@x402/core-facilitator-typescript",
+  "name": "@daydreamsai/facilitator",
   "version": "2.0.0",
+  "description": "x402 Payment Facilitator - Verify and settle x402 payments with custom signers",
   "type": "module",
-  "private": true,
+  "main": "./dist/lib.js",
+  "module": "./dist/lib.js",
+  "types": "./dist/lib.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/lib.js",
+      "types": "./dist/lib.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server.js",
+      "types": "./dist/server.d.ts"
+    },
+    "./signers/cdp": {
+      "import": "./dist/signers/lib.js",
+      "types": "./dist/signers/lib.d.ts"
+    },
+    "./upto": {
+      "import": "./dist/upto/lib.js",
+      "types": "./dist/upto/lib.d.ts"
+    },
+    "./upto/evm": {
+      "import": "./dist/upto/evm/lib.js",
+      "types": "./dist/upto/evm/lib.d.ts"
+    }
+  },
+  "bin": {
+    "x402-facilitator": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "smoke:upto": "tsx examples/smokeClient.ts",
     "smoke:api": "tsx examples/paidApi.ts",
+    "example:hono": "tsx examples/honoServer.ts",
+    "example:hono:client": "tsx examples/honoClient.ts",
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
@@ -16,28 +52,71 @@
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage"
   },
+  "keywords": [
+    "x402",
+    "payments",
+    "crypto",
+    "evm",
+    "solana",
+    "facilitator",
+    "usdc",
+    "coinbase",
+    "cdp"
+  ],
+  "author": "Daydreams AI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/daydreamsai/facilitator"
+  },
+  "bugs": {
+    "url": "https://github.com/daydreamsai/facilitator/issues"
+  },
+  "homepage": "https://github.com/daydreamsai/facilitator#readme",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
+    "@x402/core": "2.0.0",
+    "@x402/evm": "2.0.0",
+    "@x402/hono": "^2.0.0",
+    "@x402/svm": "2.0.0",
+    "hono": "^4.11.1",
+    "viem": "^2.21.54"
+  },
+  "peerDependencies": {
+    "@coinbase/cdp-sdk": ">=1.40.0",
+    "@solana/kit": ">=2.0.0",
+    "elysia": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@coinbase/cdp-sdk": {
+      "optional": true
+    },
+    "@solana/kit": {
+      "optional": true
+    },
+    "elysia": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
     "@bogeychan/elysia-logger": "^0.1.10",
     "@coinbase/cdp-sdk": "^1.40.1",
     "@elysiajs/node": "^1.0.0",
+    "@hono/node-server": "^1.13.7",
     "@elysiajs/opentelemetry": "^1.4.9",
+    "@eslint/js": "^9.24.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.208.0",
     "@opentelemetry/sdk-trace-node": "^2.2.0",
     "@scure/base": "^1.2.6",
     "@solana/kit": "^2.1.1",
-    "@x402/core": "2.0.0",
-    "@x402/evm": "2.0.0",
-    "@x402/extensions": "2.0.0",
-    "@x402/svm": "2.0.0",
-    "dotenv": "^16.4.5",
-    "elysia": "^1.0.0",
-    "viem": "^2.21.54"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.24.0",
     "@types/node": "^22.10.1",
     "@typescript-eslint/eslint-plugin": "^8.29.1",
     "@typescript-eslint/parser": "^8.29.1",
+    "@x402/extensions": "2.0.0",
+    "dotenv": "^16.4.5",
+    "elysia": "^1.0.0",
     "eslint": "^9.15.0",
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-jsdoc": "^50.6.9",
