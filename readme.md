@@ -10,6 +10,9 @@ A production-ready payment settlement service for the [x402 protocol](https://gi
 - [Architecture](#architecture)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
+  - [Environment Variables](#environment-variables)
+  - [Network Configuration](#network-configuration)
+  - [RPC Configuration](#rpc-configuration)
 - [Custom Signers](#custom-signers)
 - [API Reference](#api-reference)
 - [Payment Schemes](#payment-schemes)
@@ -172,19 +175,122 @@ curl http://localhost:8090/supported
 
 **Private Key Signer (Fallback)**
 
-| Variable           | Required | Default | Description                        |
-| ------------------ | -------- | ------- | ---------------------------------- |
-| `EVM_PRIVATE_KEY`  | Yes\*    | -       | Ethereum private key (hex format)  |
-| `SVM_PRIVATE_KEY`  | Yes\*    | -       | Solana private key (Base58 format) |
+| Variable          | Required | Default | Description                        |
+| ----------------- | -------- | ------- | ---------------------------------- |
+| `EVM_PRIVATE_KEY` | Yes\*    | -       | Ethereum private key (hex format)  |
+| `SVM_PRIVATE_KEY` | Yes\*    | -       | Solana private key (Base58 format) |
 
 \*Required when CDP credentials are not configured.
 
 **Server Configuration**
 
-| Variable           | Required | Default | Description             |
-| ------------------ | -------- | ------- | ----------------------- |
-| `PORT`             | No       | `8090`  | Server port             |
-| `EVM_RPC_URL_BASE` | No       | -       | Custom RPC URL for Base |
+| Variable | Required | Default | Description |
+| -------- | -------- | ------- | ----------- |
+| `PORT`   | No       | `8090`  | Server port |
+
+### Network Configuration
+
+The facilitator uses a simplified network configuration system. Instead of manually specifying RPC URLs for each network, you can set API keys and enable networks with comma-separated lists.
+
+**Enabling Networks**
+
+| Variable       | Default                 | Description                    |
+| -------------- | ----------------------- | ------------------------------ |
+| `EVM_NETWORKS` | `base,base-sepolia`     | Comma-separated EVM networks   |
+| `SVM_NETWORKS` | `solana-devnet`         | Comma-separated Solana networks |
+
+**Supported EVM Networks**
+
+| Name               | CAIP-2            | Chain ID |
+| ------------------ | ----------------- | -------- |
+| `base`             | `eip155:8453`     | 8453     |
+| `base-sepolia`     | `eip155:84532`    | 84532    |
+| `ethereum`         | `eip155:1`        | 1        |
+| `sepolia`          | `eip155:11155111` | 11155111 |
+| `optimism`         | `eip155:10`       | 10       |
+| `optimism-sepolia` | `eip155:11155420` | 11155420 |
+| `arbitrum`         | `eip155:42161`    | 42161    |
+| `arbitrum-sepolia` | `eip155:421614`   | 421614   |
+| `polygon`          | `eip155:137`      | 137      |
+| `polygon-amoy`     | `eip155:80002`    | 80002    |
+| `avalanche`        | `eip155:43114`    | 43114    |
+| `avalanche-fuji`   | `eip155:43113`    | 43113    |
+| `abstract`         | `eip155:2741`     | 2741     |
+| `abstract-testnet` | `eip155:11124`    | 11124    |
+
+**Supported SVM Networks**
+
+| Name              | CAIP-2                                    |
+| ----------------- | ----------------------------------------- |
+| `solana-mainnet`  | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` |
+| `solana-devnet`   | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` |
+| `solana-testnet`  | `solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z` |
+
+### RPC Configuration
+
+RPC URLs are automatically resolved based on available API keys. Set a single API key to enable RPC access for all networks.
+
+**RPC Provider API Keys**
+
+| Variable          | Provider | Description                                       |
+| ----------------- | -------- | ------------------------------------------------- |
+| `ALCHEMY_API_KEY` | Alchemy  | EVM RPC provider ([alchemy.com](https://alchemy.com)) |
+| `INFURA_API_KEY`  | Infura   | EVM RPC provider ([infura.io](https://infura.io))     |
+| `HELIUS_API_KEY`  | Helius   | Solana RPC provider ([helius.dev](https://helius.dev)) |
+
+**RPC Resolution Priority (EVM)**
+
+1. Explicit override: `EVM_RPC_URL_<NETWORK>` (e.g., `EVM_RPC_URL_BASE`)
+2. Alchemy (if `ALCHEMY_API_KEY` is set)
+3. Infura (if `INFURA_API_KEY` is set)
+4. Public RPC fallback
+
+**RPC Resolution Priority (SVM)**
+
+1. Explicit override: `SVM_RPC_URL_<NETWORK>` (e.g., `SVM_RPC_URL_SOLANA_MAINNET`)
+2. Helius (if `HELIUS_API_KEY` is set)
+3. Public RPC fallback
+
+**Explicit RPC Overrides**
+
+Override specific networks when needed (hyphens become underscores in env var names):
+
+```bash
+# EVM overrides
+EVM_RPC_URL_BASE=https://custom-base-rpc.example.com
+EVM_RPC_URL_BASE_SEPOLIA=https://custom-sepolia-rpc.example.com
+
+# SVM overrides
+SVM_RPC_URL_SOLANA_MAINNET=https://custom-solana-rpc.example.com
+```
+
+### Example Configurations
+
+**Minimal (Base only with Alchemy)**
+
+```bash
+CDP_API_KEY_ID=your-key-id
+CDP_API_KEY_SECRET=your-secret
+CDP_WALLET_SECRET=your-wallet-secret
+ALCHEMY_API_KEY=your-alchemy-key
+```
+
+**Multi-Network EVM**
+
+```bash
+EVM_NETWORKS=base,optimism,arbitrum,polygon
+ALCHEMY_API_KEY=your-alchemy-key
+```
+
+**Full Stack (EVM + Solana)**
+
+```bash
+EVM_NETWORKS=base,base-sepolia,optimism
+SVM_NETWORKS=solana-mainnet,solana-devnet
+ALCHEMY_API_KEY=your-alchemy-key
+HELIUS_API_KEY=your-helius-key
+SVM_PRIVATE_KEY=your-solana-private-key
+```
 
 ### OpenTelemetry (Optional)
 
@@ -610,21 +716,6 @@ services:
       timeout: 10s
       retries: 3
 ```
-
-## Network Identifiers
-
-Networks use [CAIP-2](https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-2.md) format:
-
-| Network          | Identifier                                |
-| ---------------- | ----------------------------------------- |
-| Ethereum Mainnet | `eip155:1`                                |
-| Base Mainnet     | `eip155:8453`                             |
-| Base Sepolia     | `eip155:84532`                            |
-| Optimism         | `eip155:10`                               |
-| Arbitrum         | `eip155:42161`                            |
-| Polygon          | `eip155:137`                              |
-| Solana Devnet    | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` |
-| Solana Mainnet   | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` |
 
 ## License
 

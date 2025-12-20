@@ -203,7 +203,19 @@ async function testUptoScheme(): Promise<boolean> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sessionId }),
   });
-  console.log("Close/settle response:", await closeRes.json());
+  const closeData = (await closeRes.json()) as {
+    success?: boolean;
+    status?: string;
+    network?: string;
+    asset?: string;
+  };
+  console.log("Close/settle response:", closeData);
+
+  // Invalidate permit cache after successful settlement
+  if (closeData.success && closeData.status === "closed" && closeData.network && closeData.asset) {
+    console.log("Invalidating permit cache for", closeData.network, closeData.asset);
+    uptoScheme.invalidatePermit(closeData.network, closeData.asset as `0x${string}`);
+  }
 
   // Check session status after settlement
   const status2 = await fetch(`${BASE_URL}/api/upto-session/${sessionId}`).then(

@@ -7,6 +7,8 @@ export {
   evmAccount,
   svmAccount,
   viemClient,
+  createPrivateKeyEvmSigner,
+  type PrivateKeySignerConfig,
 } from "./default.js";
 
 // CDP signer adapter

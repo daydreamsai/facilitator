@@ -15,22 +15,44 @@ import {
   type Hex,
   type PublicClient,
 } from "viem";
-import { base, baseSepolia, mainnet, optimism, arbitrum, polygon } from "viem/chains";
+import {
+  abstract,
+  abstractTestnet,
+  arbitrum,
+  arbitrumSepolia,
+  avalanche,
+  avalancheFuji,
+  base,
+  baseSepolia,
+  mainnet,
+  optimism,
+  optimismSepolia,
+  polygon,
+  polygonAmoy,
+  sepolia,
+} from "viem/chains";
 
 // ============================================================================
 // Types
 // ============================================================================
 
-/** CDP network identifiers - matches SendEvmTransactionBodyNetwork from SDK */
+/** CDP network identifiers - CDP supports all EVM networks */
 export type CdpNetwork =
+  | "abstract"
+  | "abstract-testnet"
+  | "arbitrum"
+  | "arbitrum-sepolia"
+  | "avalanche"
+  | "avalanche-fuji"
   | "base"
   | "base-sepolia"
   | "ethereum"
   | "ethereum-sepolia"
-  | "avalanche"
-  | "polygon"
   | "optimism"
-  | "arbitrum";
+  | "optimism-sepolia"
+  | "polygon"
+  | "polygon-amoy"
+  | (string & {}); // Allow any string for forward compatibility
 
 /** Configuration for creating a CDP signer */
 export interface CdpSignerConfig {
@@ -51,25 +73,37 @@ export interface CdpSignerConfig {
 /** Map CAIP-2 chain IDs to CDP network names */
 const CAIP2_TO_CDP_NETWORK: Record<number, CdpNetwork> = {
   1: "ethereum",
-  8453: "base",
-  84532: "base-sepolia",
   10: "optimism",
-  42161: "arbitrum",
   137: "polygon",
-  43114: "avalanche",
+  2741: "abstract",
+  8453: "base",
+  11124: "abstract-testnet",
   11155111: "ethereum-sepolia",
+  11155420: "optimism-sepolia",
+  42161: "arbitrum",
+  43113: "avalanche-fuji",
+  43114: "avalanche",
+  80002: "polygon-amoy",
+  84532: "base-sepolia",
+  421614: "arbitrum-sepolia",
 };
 
 /** Map CDP network names to viem Chain configs */
-const CDP_NETWORK_TO_CHAIN: Record<CdpNetwork, Chain> = {
+const CDP_NETWORK_TO_CHAIN: Record<string, Chain> = {
+  abstract: abstract,
+  "abstract-testnet": abstractTestnet,
+  arbitrum: arbitrum,
+  "arbitrum-sepolia": arbitrumSepolia,
+  avalanche: avalanche,
+  "avalanche-fuji": avalancheFuji,
   base: base,
   "base-sepolia": baseSepolia,
   ethereum: mainnet,
-  "ethereum-sepolia": mainnet, // Uses mainnet config with sepolia RPC
+  "ethereum-sepolia": sepolia,
   optimism: optimism,
-  arbitrum: arbitrum,
+  "optimism-sepolia": optimismSepolia,
   polygon: polygon,
-  avalanche: mainnet, // Fallback - add avalanche chain if needed
+  "polygon-amoy": polygonAmoy,
 };
 
 /**
@@ -204,10 +238,10 @@ export function createCdpEvmSigner(config: CdpSignerConfig): FacilitatorEvmSigne
         args: args.args,
       });
 
-      // Send via CDP SDK
+      // Send via CDP SDK (cast network to any for SDK compatibility)
       const result = await cdpClient.evm.sendTransaction({
         address: account.address as Address,
-        network,
+        network: network as any,
         transaction: {
           to: args.address,
           data,
@@ -223,9 +257,10 @@ export function createCdpEvmSigner(config: CdpSignerConfig): FacilitatorEvmSigne
      * Uses CDP SDK to sign and broadcast
      */
     sendTransaction: async (args: { to: Address; data: Hex }) => {
+      // Cast network to any for SDK compatibility
       const result = await cdpClient.evm.sendTransaction({
         address: account.address as Address,
-        network,
+        network: network as any,
         transaction: {
           to: args.to,
           data: args.data,

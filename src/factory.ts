@@ -9,6 +9,8 @@ import type { FacilitatorEvmSigner } from "@x402/evm";
 import type { FacilitatorSvmSigner } from "@x402/svm";
 import { x402Facilitator } from "@x402/core/facilitator";
 import { ExactEvmScheme } from "@x402/evm/exact/facilitator";
+import { ExactEvmSchemeV1 } from "@x402/evm/exact/v1/facilitator";
+import { NETWORKS as V1_NETWORKS } from "@x402/evm/v1";
 import { registerExactSvmScheme } from "@x402/svm/exact/facilitator";
 
 import { registerUptoEvmScheme } from "./upto/evm/register.js";
@@ -32,6 +34,17 @@ export interface EvmSignerConfig {
   schemes?: EvmSchemeType[];
   /** Enable ERC-4337 with EIP-6492 signature validation */
   deployERC4337WithEIP6492?: boolean;
+  /**
+   * Also register v1 exact scheme for backwards compatibility.
+   * Only registers for networks that support v1 (from @x402/evm).
+   * Defaults to true.
+   */
+  registerV1?: boolean;
+  /**
+   * Network name(s) for v1 registration (e.g., "base", "base-sepolia").
+   * Required when registerV1 is true to map CAIP IDs to v1 network names.
+   */
+  v1NetworkNames?: string | string[];
 }
 
 export interface SvmSignerConfig {
@@ -112,15 +125,38 @@ export function createFacilitator(config: FacilitatorConfig): x402Facilitator {
   // Register EVM signers and their schemes
   for (const evmConfig of config.evmSigners ?? []) {
     const schemes = evmConfig.schemes ?? ["exact", "upto"];
+    const registerV1 = evmConfig.registerV1 ?? true;
 
     if (schemes.includes("exact")) {
-      // Register v2 only (skip v1 auto-registration from @x402/evm)
+      // Register v2 scheme
       facilitator.register(
         evmConfig.networks,
         new ExactEvmScheme(evmConfig.signer, {
           deployERC4337WithEIP6492: evmConfig.deployERC4337WithEIP6492,
         })
       );
+
+      // Register v1 scheme for backwards compatibility
+      if (registerV1 && evmConfig.v1NetworkNames) {
+        const v1Names = Array.isArray(evmConfig.v1NetworkNames)
+          ? evmConfig.v1NetworkNames
+          : [evmConfig.v1NetworkNames];
+
+        // Filter to only networks that @x402/evm supports for v1
+        const supportedV1Names = v1Names.filter((name) =>
+          V1_NETWORKS.includes(name)
+        );
+
+        if (supportedV1Names.length > 0) {
+          // V1 uses network names (e.g., "base") not CAIP IDs
+          facilitator.register(
+            supportedV1Names as NetworkId[],
+            new ExactEvmSchemeV1(evmConfig.signer, {
+              deployERC4337WithEIP6492: evmConfig.deployERC4337WithEIP6492,
+            })
+          );
+        }
+      }
     }
 
     if (schemes.includes("upto")) {

@@ -7,9 +7,24 @@ import { base58 } from "@scure/base";
 import { createKeyPairSignerFromBytes } from "@solana/kit";
 import { toFacilitatorEvmSigner, type FacilitatorEvmSigner } from "@x402/evm";
 import { toFacilitatorSvmSigner } from "@x402/svm";
-import { createWalletClient, http, publicActions } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { base, baseSepolia } from "viem/chains";
+import { createWalletClient, http, publicActions, type Chain } from "viem";
+import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
+import {
+  abstract,
+  abstractTestnet,
+  arbitrum,
+  arbitrumSepolia,
+  avalanche,
+  avalancheFuji,
+  base,
+  baseSepolia,
+  mainnet,
+  optimism,
+  optimismSepolia,
+  polygon,
+  polygonAmoy,
+  sepolia,
+} from "viem/chains";
 
 import {
   EVM_PRIVATE_KEY,
@@ -18,50 +33,89 @@ import {
   EVM_RPC_URL_BASE_SEPOLIA,
 } from "../config.js";
 
-if (!EVM_PRIVATE_KEY || !SVM_PRIVATE_KEY) {
-  throw new Error(
-    "Private key signers require EVM_PRIVATE_KEY and SVM_PRIVATE_KEY environment variables"
-  );
+// ============================================================================
+// Network to Chain Mapping
+// ============================================================================
+
+const NETWORK_TO_CHAIN: Record<string, Chain> = {
+  abstract,
+  "abstract-testnet": abstractTestnet,
+  arbitrum,
+  "arbitrum-sepolia": arbitrumSepolia,
+  avalanche,
+  "avalanche-fuji": avalancheFuji,
+  base,
+  "base-sepolia": baseSepolia,
+  ethereum: mainnet,
+  optimism,
+  "optimism-sepolia": optimismSepolia,
+  polygon,
+  "polygon-amoy": polygonAmoy,
+  sepolia,
+};
+
+// ============================================================================
+// Private Key Signer Factory
+// ============================================================================
+
+export interface PrivateKeySignerConfig {
+  /** Network name (e.g., "base", "base-sepolia") */
+  network: string;
+  /** RPC URL for the network */
+  rpcUrl: string;
+  /** Optional private key override (defaults to EVM_PRIVATE_KEY env var) */
+  privateKey?: string;
 }
 
-const normalizedEvmKey = EVM_PRIVATE_KEY.startsWith("0x")
-  ? EVM_PRIVATE_KEY
-  : `0x${EVM_PRIVATE_KEY}`;
+/**
+ * Creates a FacilitatorEvmSigner from a private key for a specific network.
+ *
+ * @example
+ * ```typescript
+ * const signer = createPrivateKeyEvmSigner({
+ *   network: "base",
+ *   rpcUrl: "https://mainnet.base.org",
+ * });
+ * ```
+ */
+export function createPrivateKeyEvmSigner(
+  config: PrivateKeySignerConfig
+): FacilitatorEvmSigner {
+  const { network, rpcUrl, privateKey } = config;
 
-export const evmAccount = privateKeyToAccount(
-  normalizedEvmKey as `0x${string}`
-);
-console.info(`EVM Facilitator account: ${evmAccount.address}`);
+  const key = privateKey ?? EVM_PRIVATE_KEY;
+  if (!key) {
+    throw new Error("Private key signer requires EVM_PRIVATE_KEY or privateKey option");
+  }
 
-// Initialize the SVM account from private key
-export const svmAccount = await createKeyPairSignerFromBytes(
-  base58.decode(SVM_PRIVATE_KEY as string)
-);
-console.info(`SVM Facilitator account: ${svmAccount.address}`);
+  const chain = NETWORK_TO_CHAIN[network];
+  if (!chain) {
+    throw new Error(`Unsupported network: ${network}. Add it to NETWORK_TO_CHAIN.`);
+  }
+
+  const normalizedKey = key.startsWith("0x") ? key : `0x${key}`;
+  const account = privateKeyToAccount(normalizedKey as `0x${string}`);
+
+  return createSignerFromAccount(account, chain, rpcUrl);
+}
 
 /**
- * Create a viem client for a specific chain and RPC URL
+ * Create a FacilitatorEvmSigner from an account and chain config
  */
-function createViemClientForChain(
-  chain: typeof base | typeof baseSepolia,
+function createSignerFromAccount(
+  account: PrivateKeyAccount,
+  chain: Chain,
   rpcUrl?: string
-) {
-  return createWalletClient({
-    account: evmAccount,
+): FacilitatorEvmSigner {
+  const client = createWalletClient({
+    account,
     chain,
     transport: rpcUrl ? http(rpcUrl) : http(),
   }).extend(publicActions);
-}
 
-/**
- * Create a FacilitatorEvmSigner from a viem client
- */
-function createSignerFromClient(
-  client: ReturnType<typeof createViemClientForChain>
-): FacilitatorEvmSigner {
   return toFacilitatorEvmSigner({
     getCode: (args: { address: `0x${string}` }) => client.getCode(args),
-    address: evmAccount.address,
+    address: account.address,
     readContract: (args: {
       address: `0x${string}`;
       abi: readonly unknown[];
@@ -98,21 +152,57 @@ function createSignerFromClient(
   });
 }
 
-// Create separate clients and signers for each network
-// Base Mainnet
-const baseClient = createViemClientForChain(base, EVM_RPC_URL_BASE);
-export const baseSigner = createSignerFromClient(baseClient);
+// ============================================================================
+// Legacy Default Signers (for backwards compatibility)
+// ============================================================================
 
-// Base Sepolia
-const baseSepoliaClient = createViemClientForChain(
-  baseSepolia,
-  EVM_RPC_URL_BASE_SEPOLIA
-);
-export const baseSepoliaSigner = createSignerFromClient(baseSepoliaClient);
+// These legacy exports are conditionally initialized
+// New code should use createPrivateKeyEvmSigner() instead
 
-// Legacy export for backwards compatibility (uses Base mainnet)
-export const viemClient = baseClient;
-export const evmSigner = baseSigner;
+let evmAccount: ReturnType<typeof privateKeyToAccount> | undefined;
+let svmAccount: Awaited<ReturnType<typeof createKeyPairSignerFromBytes>> | undefined;
+let baseSigner: FacilitatorEvmSigner | undefined;
+let baseSepoliaSigner: FacilitatorEvmSigner | undefined;
+let evmSigner: FacilitatorEvmSigner | undefined;
+let svmSigner: ReturnType<typeof toFacilitatorSvmSigner> | undefined;
+let viemClient: ReturnType<typeof createWalletClient> | undefined;
 
-// Facilitator can now handle all Solana networks with automatic RPC creation
-export const svmSigner = toFacilitatorSvmSigner(svmAccount);
+// Initialize legacy EVM signers if private key is set
+if (EVM_PRIVATE_KEY) {
+  const normalizedEvmKey = EVM_PRIVATE_KEY.startsWith("0x")
+    ? EVM_PRIVATE_KEY
+    : `0x${EVM_PRIVATE_KEY}`;
+
+  evmAccount = privateKeyToAccount(normalizedEvmKey as `0x${string}`);
+
+  // Create legacy signers using the new factory
+  baseSigner = createPrivateKeyEvmSigner({
+    network: "base",
+    rpcUrl: EVM_RPC_URL_BASE ?? "https://mainnet.base.org",
+  });
+
+  baseSepoliaSigner = createPrivateKeyEvmSigner({
+    network: "base-sepolia",
+    rpcUrl: EVM_RPC_URL_BASE_SEPOLIA ?? "https://sepolia.base.org",
+  });
+
+  evmSigner = baseSigner;
+}
+
+// Initialize SVM signer if private key is set
+if (SVM_PRIVATE_KEY) {
+  svmAccount = await createKeyPairSignerFromBytes(
+    base58.decode(SVM_PRIVATE_KEY as string)
+  );
+  svmSigner = toFacilitatorSvmSigner(svmAccount);
+}
+
+export {
+  evmAccount,
+  svmAccount,
+  baseSigner,
+  baseSepoliaSigner,
+  evmSigner,
+  svmSigner,
+  viemClient,
+};

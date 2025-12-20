@@ -131,6 +131,8 @@ export function trackUptoPayment(
 export function formatSession(session: UptoSession) {
   return {
     status: session.status,
+    network: session.paymentRequirements.network,
+    asset: session.paymentRequirements.asset,
     cap: session.cap.toString(),
     pendingSpent: session.pendingSpent.toString(),
     settledTotal: session.settledTotal.toString(),

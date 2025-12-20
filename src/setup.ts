@@ -14,13 +14,16 @@ import {
   createFacilitator,
   type EvmSignerConfig,
   type SvmSignerConfig,
+  type NetworkId,
 } from "./factory.js";
-import { createCdpEvmSigner } from "./signers/cdp.js";
+import { createCdpEvmSigner, type CdpNetwork } from "./signers/cdp.js";
 import {
   USE_CDP,
-  EVM_RPC_URL_BASE,
-  EVM_RPC_URL_BASE_SEPOLIA,
   SVM_PRIVATE_KEY,
+  CDP_ACCOUNT_NAME,
+  getNetworkSetups,
+  getSvmNetworkSetups,
+  getRpcUrl,
 } from "./config.js";
 
 // Re-export types and factory for backwards compatibility
@@ -34,85 +37,101 @@ async function createDefaultSigners(): Promise<{
   evmSigners: EvmSignerConfig[];
   svmSigners: SvmSignerConfig[];
 }> {
+  const networkSetups = getNetworkSetups();
+
   if (USE_CDP) {
     // CDP Signer (preferred)
     const cdp = new CdpClient();
 
     const account = await cdp.evm.getOrCreateAccount({
-      name: process.env.CDP_ACCOUNT_NAME!,
+      name: CDP_ACCOUNT_NAME!,
     });
 
     console.info(`CDP Facilitator account: ${account.address}`);
 
     const evmSigners: EvmSignerConfig[] = [];
 
-    // Base Mainnet
-    const baseSigner = createCdpEvmSigner({
-      cdpClient: cdp,
-      account,
-      network: "base",
-      rpcUrl: EVM_RPC_URL_BASE,
-    });
-    evmSigners.push({
-      signer: baseSigner,
-      networks: "eip155:8453",
-      schemes: ["exact", "upto"],
-      deployERC4337WithEIP6492: true,
-    });
+    // Create a signer for each configured network
+    for (const network of networkSetups) {
+      const signer = createCdpEvmSigner({
+        cdpClient: cdp,
+        account,
+        network: network.name as CdpNetwork,
+        rpcUrl: network.rpcUrl,
+      });
 
-    // Base Sepolia
-    const baseSepoliaSigner = createCdpEvmSigner({
-      cdpClient: cdp,
-      account,
-      network: "base-sepolia",
-      rpcUrl: EVM_RPC_URL_BASE_SEPOLIA,
-    });
-    evmSigners.push({
-      signer: baseSepoliaSigner,
-      networks: "eip155:84532",
-      schemes: ["exact", "upto"],
-      deployERC4337WithEIP6492: true,
-    });
+      evmSigners.push({
+        signer,
+        networks: network.caip as NetworkId,
+        schemes: ["exact", "upto"],
+        deployERC4337WithEIP6492: true,
+        // Enable v1 for networks that support it
+        registerV1: network.supportsV1,
+        v1NetworkNames: network.supportsV1 ? network.name : undefined,
+      });
+    }
 
     // CDP doesn't support SVM yet, use private key signer if available
     const svmSigners: SvmSignerConfig[] = [];
     if (SVM_PRIVATE_KEY) {
       const { svmSigner } = await import("./signers/index.js");
-      svmSigners.push({
-        signer: svmSigner,
-        networks: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
-      });
+      if (svmSigner) {
+        // Register for each configured SVM network
+        const svmNetworkSetups = getSvmNetworkSetups();
+        for (const network of svmNetworkSetups) {
+          svmSigners.push({
+            signer: svmSigner,
+            networks: network.caip as NetworkId,
+          });
+        }
+      }
     }
 
     return { evmSigners, svmSigners };
   } else {
     // Private Key Signer (fallback)
-    // Create separate signers for each network to ensure correct RPC/chain configuration
-    const { baseSigner, baseSepoliaSigner, svmSigner } =
+    const { createPrivateKeyEvmSigner, svmSigner } =
       await import("./signers/index.js");
 
-    return {
-      evmSigners: [
-        {
-          signer: baseSigner,
-          networks: "eip155:8453", // Base mainnet
-          schemes: ["exact", "upto"],
-          deployERC4337WithEIP6492: true,
-        },
-        {
-          signer: baseSepoliaSigner,
-          networks: "eip155:84532", // Base Sepolia
-          schemes: ["exact", "upto"],
-          deployERC4337WithEIP6492: true,
-        },
-      ],
-      svmSigners: [
-        {
+    const evmSigners: EvmSignerConfig[] = [];
+
+    // Create a signer for each configured network
+    for (const network of networkSetups) {
+      const rpcUrl = getRpcUrl(network.name);
+      if (!rpcUrl) {
+        console.warn(`⚠️  No RPC URL for ${network.name} - skipping`);
+        continue;
+      }
+
+      const signer = createPrivateKeyEvmSigner({
+        network: network.name,
+        rpcUrl,
+      });
+
+      evmSigners.push({
+        signer,
+        networks: network.caip as NetworkId,
+        schemes: ["exact", "upto"],
+        deployERC4337WithEIP6492: true,
+        // Enable v1 for networks that support it
+        registerV1: network.supportsV1,
+        v1NetworkNames: network.supportsV1 ? network.name : undefined,
+      });
+    }
+
+    const svmSigners: SvmSignerConfig[] = [];
+    if (svmSigner) {
+      // Register for each configured SVM network
+      const svmNetworkSetups = getSvmNetworkSetups();
+      for (const network of svmNetworkSetups) {
+        svmSigners.push({
           signer: svmSigner,
-          networks: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
-        },
-      ],
-    };
+          networks: network.caip as NetworkId,
+        });
+      }
+    }
+
+    return { evmSigners, svmSigners };
   }
 }
 
