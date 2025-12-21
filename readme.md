@@ -537,6 +537,21 @@ Immediate, single-transaction settlement. Each payment request results in one on
 - USDC on Base (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`)
 - SPL tokens on Solana
 
+#### Exact Scheme (Starknet Paymaster)
+
+Starknet exact payments are gasless for users because a **paymaster** sponsors gas. The user still signs the transaction data.
+
+**Flow:**
+
+1. Client receives `PaymentRequired` (402 response).
+2. Client calls the paymaster `paymaster_buildTransaction` to get SNIP-12 `typed_data`.
+3. Client signs `typed_data` with their **own** Starknet account signer (private key or wallet).
+4. Client sends `PaymentPayload` **including `typedData`** to the resource server/facilitator.
+5. Facilitator verifies the payload and calls `paymaster_executeTransaction` to submit the tx.
+6. Paymaster pays gas from its sponsor account and broadcasts to Starknet.
+
+**Important:** The paymaster never signs for the user. If the client cannot sign, the payment cannot be created. The facilitator **rejects Starknet payloads without `typedData`**. `STARKNET_SPONSOR_ADDRESS` identifies the paymaster sponsor account for `/supported`.
+
 ### Upto Scheme (Batched Payments)
 
 Permit-based flow for efficient EVM token payments:
