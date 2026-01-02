@@ -71,7 +71,11 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:watch": "bun test --watch",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage",
+    "benchmark:setup": "tsx benchmarks/setup-wallets.ts",
+    "benchmark:api": "tsx benchmarks/paid-api-server.ts",
+    "benchmark:run": "tsx benchmarks/run-benchmark.ts",
+    "benchmark:balances": "tsx benchmarks/check-balances.ts"
   },
   "keywords": [
     "x402",

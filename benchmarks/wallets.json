@@ -1,0 +1,111 @@
+{
+  "createdAt": "2025-12-31T19:53:26.525Z",
+  "masterWallet": "0xBBc4344Bb405858959d81aB1DEadD7a13EC37E13",
+  "network": "polygon",
+  "usdcAddress": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+  "rpcUrl": "https://polygon.gateway.tenderly.co/1bLJbEpGCgXFSNi3f5Q8Kb",
+  "wallets": [
+    {
+      "address": "0x92Adc157197045A367cFCCBFaE206E93eBF8E38A",
+      "privateKey": "0x71e97d6828575748a0a3a96dbeda3f64e3dd2762446bafc87a2d3dbad412f4e5"
+    },
+    {
+      "address": "0x329214D7DC7d9E16147F5F99a65087fbFa9A3af4",
+      "privateKey": "0x94bdf94e23cb355f05c251ebc68891408b72c001689e89a31e466f86654c3b16"
+    },
+    {
+      "address": "0x0911B03B03bda4F7f308277768Bddc0055aAE66b",
+      "privateKey": "0x33617e4572f26e6e58d1cc4fd2b797ad48bd9f058bcfcf17ee50a3fbc833da1d"
+    },
+    {
+      "address": "0xBD7d09cBf6Cb87d9c855b0933C58d480F03bec54",
+      "privateKey": "0x2511c9f1bb07108bbdaf5acb67e9519febbb60e50a418b8b79be1841ea89cdf9"
+    },
+    {
+      "address": "0x02ee99ffE37C13643391435f84789522FD7b88cC",
+      "privateKey": "0x8ca686a092a30c13931a05af2be2a47a61e74a6fdff691adc50d6653fdcfd269"
+    },
+    {
+      "address": "0xBF18dD3d1360a2C68C965f1307a86922f9164b78",
+      "privateKey": "0x675707ef0c705818230f6feedb0e868425aaf41ee655edf9ea030a75bb072167"
+    },
+    {
+      "address": "0xb1E06B8bA4B5ABB17f77e60f2DeF98E52bFf4fce",
+      "privateKey": "0x1351e5516b14968d270950e2169fa4a5fab118fa47da598fa42aea51c341f725"
+    },
+    {
+      "address": "0x5F5cA5ec4eAEa6288847dD8c4D7ef5C1A1Bd3f33",
+      "privateKey": "0x0099be291192a2fdc2750ec9aeacc935e5bea939f90d05e26c17b0a328667352"
+    },
+    {
+      "address": "0xc190d0EBaACDEb717C44CbF09a3Afbb6B4Ee1535",
+      "privateKey": "0xad9c3c2662a4027967e3dd7ebda709f9a36ea9b9110c2de31570a9f0a3d655b2"
+    },
+    {
+      "address": "0xb779999DF4b090A6772eEd6504D2441B7badd6e6",
+      "privateKey": "0x6aac93fdb74fcdbdeb923397d00b9caab070e37f95ab859b2379072af94b13af"
+    }
+  ],
+  "funding": [
+    {
+      "wallet": 1,
+      "address": "0x92Adc157197045A367cFCCBFaE206E93eBF8E38A",
+      "txHash": "0x4f14a81cfabaefd5b5d47b90635a2fc83d992d3d403386817e1e17ade63e1e37",
+      "amount": "0.01"
+    },
+    {
+      "wallet": 2,
+      "address": "0x329214D7DC7d9E16147F5F99a65087fbFa9A3af4",
+      "txHash": "0x9b68302ffddb0f9c02643f79bdb6616d5e8deee14795457677a769cd6f0fe3c5",
+      "amount": "0.01"
+    },
+    {
+      "wallet": 3,
+      "address": "0x0911B03B03bda4F7f308277768Bddc0055aAE66b",
+      "txHash": "0x924b6bdb5208f6effdfa7fc517b3ff46227702443fd5cc0623fc87baaae3416a",
+      "amount": "0.01"
+    },
+    {
+      "wallet": 4,
+      "address": "0xBD7d09cBf6Cb87d9c855b0933C58d480F03bec54",
+      "txHash": "0x72839ff11f30122b2536e5aee77304e79a6150eff83bb836a61d574f288a10cc",
+      "amount": "0.01"
+    },
+    {
+      "wallet": 5,
+      "address": "0x02ee99ffE37C13643391435f84789522FD7b88cC",
+      "txHash": "0x0417b1c37f5a7d8a3c60f3ecef818cd8917a9629ab82a77fc3a92c23f5b1d735",
+      "amount": "0.01"
+    },
+    {
+      "wallet": 6,
+      "address": "0xBF18dD3d1360a2C68C965f1307a86922f9164b78",
+      "txHash": "0x687f39f895ba6f53789c255ecbe81765cb8ea986d14526b9a835c6ce657aaa85",
+      "amount": "0.01"
+    },
+    {
+      "wallet": 7,
+      "address": "0xb1E06B8bA4B5ABB17f77e60f2DeF98E52bFf4fce",
+      "txHash": "0x02cfa1b93564166e01ea15bb5ee0f42302a59ce96372d643254330dffee3800b",
+      "amount": "0.01"
+    },
+    {
+      "wallet": 8,
+      "address": "0x5F5cA5ec4eAEa6288847dD8c4D7ef5C1A1Bd3f33",
+      "txHash": "0x25e6c4ec6021a72b4e5c4220ccfd9e935f5b59f7b53b55ff06ef6e703353ce4b",
+      "amount": "0.01"
+    },
+    {
+      "wallet": 9,
+      "address": "0xc190d0EBaACDEb717C44CbF09a3Afbb6B4Ee1535",
+      "txHash": "0xc2b18d71ce93395fdbbf5945c59ae62982b435c4725e61192a2c812f73186f29",
+      "amount": "0.01"
+    },
+    {
+      "wallet": 10,
+      "address": "0xb779999DF4b090A6772eEd6504D2441B7badd6e6",
+      "txHash": "0x5d67dce73e7374f0f87a0cef79d355eda0405a894264b62f84e30edbec0592fe",
+      "amount": "0.01"
+    }
+  ]
+}
