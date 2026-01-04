@@ -8,28 +8,45 @@
  * Library consumers should use createFacilitator() from the main export instead.
  */
 
+import "dotenv/config";
 import { CdpClient } from "@coinbase/cdp-sdk";
 
 import {
   createFacilitator,
-  type EvmSignerConfig,
-  type SvmSignerConfig,
-  type StarknetConfig,
-  type NetworkId,
-} from "./factory.js";
-import { createCdpEvmSigner, type CdpNetwork } from "./signers/cdp.js";
+  type FacilitatorConfig,
+} from "@daydreamsai/facilitator";
 import {
-  USE_CDP,
-  SVM_PRIVATE_KEY,
-  CDP_ACCOUNT_NAME,
+  createCdpEvmSigner,
+  createPrivateKeyEvmSigner,
+  createPrivateKeySvmSigner,
+  type CdpNetwork,
+} from "@daydreamsai/facilitator/signers";
+import {
   getNetworkSetups,
   getStarknetNetworkSetups,
   getSvmNetworkSetups,
   getRpcUrl,
-} from "./config.js";
+  USE_CDP,
+  SVM_PRIVATE_KEY,
+  CDP_ACCOUNT_NAME,
+} from "@daydreamsai/facilitator/config";
 
-// Re-export types and factory for backwards compatibility
-export * from "./factory.js";
+type EvmSignerConfig = FacilitatorConfig["evmSigners"] extends
+  | (infer T)[]
+  | undefined
+  ? T
+  : never;
+type SvmSignerConfig = FacilitatorConfig["svmSigners"] extends
+  | (infer T)[]
+  | undefined
+  ? T
+  : never;
+type StarknetConfig = FacilitatorConfig["starknetConfigs"] extends
+  | (infer T)[]
+  | undefined
+  ? T
+  : never;
+type NetworkId = EvmSignerConfig["networks"];
 
 // ============================================================================
 // Default Signers
@@ -100,9 +117,6 @@ async function createDefaultSigners(): Promise<{
     // CDP doesn't support SVM yet, use private key signer if available
     const svmSigners: SvmSignerConfig[] = [];
     if (SVM_PRIVATE_KEY) {
-      const { createPrivateKeySvmSigner } = await import(
-        "./signers/index.js"
-      );
       const svmSigner = await createPrivateKeySvmSigner();
       // Register for each configured SVM network
       const svmNetworkSetups = getSvmNetworkSetups();
@@ -117,9 +131,6 @@ async function createDefaultSigners(): Promise<{
     return { evmSigners, svmSigners, starknetConfigs };
   } else {
     // Private Key Signer (fallback)
-    const { createPrivateKeyEvmSigner, createPrivateKeySvmSigner } =
-      await import("./signers/index.js");
-
     const evmSigners: EvmSignerConfig[] = [];
 
     // Create a signer for each configured network

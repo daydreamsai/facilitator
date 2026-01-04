@@ -15,3 +15,4 @@ examples/starknetClient.ts
 examples/tokenMeteredApi.ts
 examples/tokenMeteredClient.ts
 examples/uptoModule.ts
+examples/facilitator-server

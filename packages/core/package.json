@@ -72,18 +72,12 @@
       "types": "./dist/auth/middleware/elysia.d.ts"
     }
   },
-  "bin": {
-    "x402-facilitator": "./dist/index.js"
-  },
   "files": [
     "dist",
-    "public",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "prepublishOnly": "npm run build",
     "lint": "eslint .",
@@ -148,14 +142,10 @@
     }
   },
   "devDependencies": {
-    "@bogeychan/elysia-logger": "^0.1.10",
     "@coinbase/cdp-sdk": "^1.40.1",
     "@elysiajs/node": "^1.0.0",
     "@hono/node-server": "^1.13.7",
-    "@elysiajs/opentelemetry": "^1.4.9",
     "@eslint/js": "^9.24.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.208.0",
-    "@opentelemetry/sdk-trace-node": "^2.2.0",
     "@scure/base": "^1.2.6",
     "@solana/kit": "^2.1.1",
     "@types/node": "^22.10.1",
