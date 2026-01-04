@@ -65,12 +65,9 @@ async function buildPackages() {
     return;
   }
 
-  // Align build order with scripts/build-all.ts so internal deps build first.
+  // Build order - core first, then dependent packages
   const preferredOrder = [
-    "@lucid-dreams/client",
-    "@lucid-dreams/sdk",
-    "@lucid-dreams/agent-auth",
-    "@lucid-dreams/agent-runtime-cli",
+    "@daydreamsai/facilitator",
   ];
 
   const packagesByName = new Map(packages.map((pkg) => [pkg.name, pkg]));

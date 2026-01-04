@@ -14,14 +14,14 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "dev": "bun run scripts/dev.ts",
-    "build": "bun run scripts/build-all.ts",
-    "build:all": "bun run scripts/build-all.ts",
+    "build": "bun run --filter '@daydreamsai/*' build",
     "build:packages": "bun run scripts/build-packages.ts",
+    "typecheck": "bun run --filter '@daydreamsai/*' typecheck",
+    "test": "bun run --filter '@daydreamsai/facilitator' test",
     "setup:changesets": "bun run scripts/setup-changesets.ts",
     "changeset": "bunx changeset",
     "release:version": "bunx changeset version",
-    "release:publish": "bun run scripts/build-packages.ts && bun run scripts/changeset-publish.ts",
+    "release:publish": "bun run build:packages && bun run scripts/changeset-publish.ts",
     "release": "bun run release:version && bun run release:publish"
   },
   "dependencies": {
