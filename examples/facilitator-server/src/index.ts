@@ -13,7 +13,8 @@
  */
 
 import { app } from "./app.js";
-import { PORT } from "./config.js";
+
+const PORT = parseInt(process.env.PORT || "8090", 10);
 
 app.listen(PORT);
 console.log(`x402 Facilitator listening on http://localhost:${PORT}`);

@@ -18,15 +18,15 @@ import { Elysia, t } from "elysia";
 import { node } from "@elysiajs/node";
 import { HTTPFacilitatorClient } from "@x402/core/http";
 
-import { createElysiaPaymentMiddleware } from "../src/elysia/middleware.js";
-import { createUptoModule, formatSession } from "../src/upto/lib.js";
-import { createPrivateKeyEvmSigner } from "../src/signers/index.js";
-import { createResourceServer } from "../src/server.js";
-import { getRpcUrl } from "../src/config.js";
+import { createElysiaPaymentMiddleware } from "@daydreamsai/facilitator/elysia";
+import { createUptoModule, formatSession } from "@daydreamsai/facilitator/upto";
+import { createPrivateKeyEvmSigner } from "@daydreamsai/facilitator/signers";
+import { createResourceServer } from "@daydreamsai/facilitator/server";
+import { getRpcUrl } from "@daydreamsai/facilitator/config";
 import {
   generateSessionId,
   extractUptoAuthorization,
-} from "../src/upto/sessionId.js";
+} from "@daydreamsai/facilitator/upto/session";
 
 // ============================================================================
 // Configuration

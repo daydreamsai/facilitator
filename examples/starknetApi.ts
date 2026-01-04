@@ -27,15 +27,14 @@ import { Elysia } from "elysia";
 import { node } from "@elysiajs/node";
 import { HTTPFacilitatorClient } from "@x402/core/http";
 import { buildETHPayment } from "x402-starknet";
-
 import { createPaywall, evmPaywall } from "@x402/paywall";
 
-import { createElysiaPaidRoutes } from "../src/elysia/index.js";
-import { createResourceServer } from "../src/server.js";
+import { createElysiaPaidRoutes } from "@daydreamsai/facilitator/elysia";
+import { createResourceServer } from "@daydreamsai/facilitator/server";
 import {
   toStarknetCanonicalCaip,
   toStarknetLegacyCaip,
-} from "../src/networks.js";
+} from "@daydreamsai/facilitator/networks";
 
 // ============================================================================
 // Configuration

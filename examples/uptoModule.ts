@@ -31,7 +31,7 @@ import {
   TRACKING_ERROR_STATUS,
   type UptoSessionStore,
   type UptoSession,
-} from "../src/upto/lib.js";
+} from "@daydreamsai/facilitator/upto";
 
 // ============================================================================
 // Custom Session Store Implementation
