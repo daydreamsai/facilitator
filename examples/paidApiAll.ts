@@ -32,23 +32,22 @@ import { Elysia } from "elysia";
 import { node } from "@elysiajs/node";
 import { HTTPFacilitatorClient } from "@x402/core/http";
 import { buildETHPayment } from "x402-starknet";
-
 import { createPaywall, evmPaywall, svmPaywall } from "@x402/paywall";
 
-import { createElysiaPaidRoutes } from "../src/elysia/index.js";
+import { createElysiaPaidRoutes } from "@daydreamsai/facilitator/elysia";
 import {
   STARKNET_CAIP_IDS,
   toStarknetCanonicalCaip,
   toStarknetLegacyCaip,
   type StarknetCaipId,
   type StarknetLegacyCaipId,
-} from "../src/networks.js";
+} from "@daydreamsai/facilitator/networks";
 import {
   createPrivateKeyEvmSigner,
   createPrivateKeySvmSigner,
-} from "../src/signers/index.js";
-import { createResourceServer } from "../src/server.js";
-import { getRpcUrl } from "../src/config.js";
+} from "@daydreamsai/facilitator/signers";
+import { createResourceServer } from "@daydreamsai/facilitator/server";
+import { getRpcUrl } from "@daydreamsai/facilitator/config";
 
 // ============================================================================
 // Configuration

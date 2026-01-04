@@ -1,15 +1,15 @@
 import { Hono } from "hono";
 import { paymentMiddleware } from "@x402/hono";
+import { HTTPFacilitatorClient } from "@x402/core/http";
 
-import { createPrivateKeyEvmSigner } from "../src/signers/index.js";
-import { getRpcUrl } from "../src/config.js";
+import { createPrivateKeyEvmSigner } from "@daydreamsai/facilitator/signers";
+import { getRpcUrl } from "@daydreamsai/facilitator/config";
+import { createResourceServer } from "@daydreamsai/facilitator/server";
 import {
-  createResourceServer,
-  HTTPFacilitatorClient,
   InMemoryUptoSessionStore,
   settleUptoSession,
   trackUptoPayment,
-} from "@daydreamsai/facilitator";
+} from "@daydreamsai/facilitator/upto";
 
 const facilitatorUrl = process.env.FACILITATOR_URL ?? "http://localhost:8090";
 const evmRpcUrl = getRpcUrl("base") ?? "https://mainnet.base.org";

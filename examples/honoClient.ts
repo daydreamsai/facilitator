@@ -19,7 +19,7 @@ import { createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 
-import { createUnifiedClient } from "../src/unifiedClient.js";
+import { createUnifiedClient } from "@daydreamsai/facilitator/client";
 
 const HONO_URL = process.env.HONO_URL ?? "http://localhost:3000";
 const FACILITATOR_URL = process.env.FACILITATOR_URL ?? "http://localhost:8090";

@@ -1,0 +1,2 @@
+packages/core:build:cd /Users/os/Documents/code/dreams/facil/packages/core && npm run build
+packages/core:tsc:cd /Users/os/Documents/code/dreams/facil/packages/core && npx tsc --noEmit

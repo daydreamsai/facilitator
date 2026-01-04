@@ -36,14 +36,14 @@ import {
   HTTP_HEADERS,
 } from "x402-starknet";
 
-import { createUnifiedClient } from "../src/unifiedClient.js";
+import { createUnifiedClient } from "@daydreamsai/facilitator/client";
 import {
   STARKNET_CAIP_IDS,
   toStarknetCanonicalCaip,
   toStarknetLegacyCaip,
   type StarknetCaipId,
   type StarknetLegacyCaipId,
-} from "../src/networks.js";
+} from "@daydreamsai/facilitator/networks";
 
 // ============================================================================
 // Configuration

@@ -6,12 +6,12 @@
  */
 
 import { Elysia } from "elysia";
-import { createAuthPlugin } from "../src/auth/middleware/elysia.js";
+import { createAuthPlugin } from "@daydreamsai/facilitator/auth/elysia";
 import {
   InMemoryTokenStorage,
   InMemoryRateLimiter,
   InMemoryUsageTracker,
-} from "../src/auth/index.js";
+} from "@daydreamsai/facilitator/auth";
 
 // Create storage instances
 const storage = new InMemoryTokenStorage();

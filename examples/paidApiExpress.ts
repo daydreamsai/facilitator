@@ -17,17 +17,16 @@
 
 import express from "express";
 import { HTTPFacilitatorClient } from "@x402/core/http";
-
 import { createPaywall, evmPaywall, svmPaywall } from "@x402/paywall";
 
-import { createExpressPaidRoutes } from "../src/express/index.js";
+import { createExpressPaidRoutes } from "@daydreamsai/facilitator/express";
 import {
   createPrivateKeyEvmSigner,
   createPrivateKeySvmSigner,
-} from "../src/signers/index.js";
-import { createResourceServer } from "../src/server.js";
-import { createUptoModule, formatSession } from "../src/upto/lib.js";
-import { getRpcUrl } from "../src/config.js";
+} from "@daydreamsai/facilitator/signers";
+import { createResourceServer } from "@daydreamsai/facilitator/server";
+import { createUptoModule, formatSession } from "@daydreamsai/facilitator/upto";
+import { getRpcUrl } from "@daydreamsai/facilitator/config";
 
 // ============================================================================
 // Configuration
