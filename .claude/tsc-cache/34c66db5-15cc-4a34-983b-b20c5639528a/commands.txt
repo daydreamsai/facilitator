@@ -1,2 +1,0 @@
-examples/facilitator-server:build:cd /Users/os/Documents/code/dreams/facil/examples/facilitator-server && npm run build
-examples/facilitator-server:tsc:cd /Users/os/Documents/code/dreams/facil/examples/facilitator-server && npx tsc --noEmit
