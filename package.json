@@ -2,7 +2,6 @@
   "workspaces": {
     "packages": [
       "examples",
-      "examples/facilitator-server",
       "packages/*"
     ],
     "catalog": {
