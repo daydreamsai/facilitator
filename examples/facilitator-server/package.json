@@ -17,7 +17,7 @@
   "dependencies": {
     "@bogeychan/elysia-logger": "^0.1.10",
     "@coinbase/cdp-sdk": "^1.40.1",
-    "@daydreamsai/facilitator": "workspace:*",
+    "@daydreamsai/facilitator": "latest",
     "@elysiajs/node": "^1.0.0",
     "@elysiajs/opentelemetry": "^1.4.9",
     "@elysiajs/static": "^1.4.7",
