@@ -116,6 +116,13 @@ export const EVM_NETWORKS = {
     infura: "sepolia.infura.io/v3",
     public: "https://rpc.sepolia.org",
   },
+  "ethereum-sepolia": {
+    chainId: 11155111,
+    caip: "eip155:11155111",
+    alchemy: "eth-sepolia.g.alchemy.com/v2",
+    infura: "sepolia.infura.io/v3",
+    public: "https://rpc.sepolia.org",
+  },
 
   // Polygon
   polygon: {

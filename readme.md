@@ -247,7 +247,7 @@ The facilitator uses a simplified network configuration system. Instead of manua
 
 | Variable       | Default                 | Description                    |
 | -------------- | ----------------------- | ------------------------------ |
-| `EVM_NETWORKS` | `base,base-sepolia`     | Comma-separated EVM networks   |
+| `EVM_NETWORKS` | `base,base-sepolia,ethereum-sepolia` | Comma-separated EVM networks   |
 | `STARKNET_NETWORKS` | `(empty)`          | Comma-separated Starknet networks (opt-in) |
 | `SVM_NETWORKS` | `solana-devnet`         | Comma-separated Solana networks |
 
@@ -258,7 +258,7 @@ The facilitator uses a simplified network configuration system. Instead of manua
 | `base`             | `eip155:8453`     | 8453     |
 | `base-sepolia`     | `eip155:84532`    | 84532    |
 | `ethereum`         | `eip155:1`        | 1        |
-| `sepolia`          | `eip155:11155111` | 11155111 |
+| `ethereum-sepolia` | `eip155:11155111` | 11155111 |
 | `optimism`         | `eip155:10`       | 10       |
 | `optimism-sepolia` | `eip155:11155420` | 11155420 |
 | `arbitrum`         | `eip155:42161`    | 42161    |

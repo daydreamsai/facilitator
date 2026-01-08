@@ -59,8 +59,8 @@ export const STARKNET_SPONSOR_ADDRESS = process.env.STARKNET_SPONSOR_ADDRESS;
 // ============================================================================
 
 // Networks to enable (comma-separated, e.g., "base,base-sepolia")
-// Defaults to Base mainnet and testnet
-const DEFAULT_EVM_NETWORKS = ["base", "base-sepolia"];
+// Defaults to Base mainnet and testnet, plus ethereum-sepolia
+const DEFAULT_EVM_NETWORKS = ["base", "base-sepolia", "ethereum-sepolia"];
 const configuredEvmNetworks = parseNetworkList(process.env.EVM_NETWORKS);
 export const EVM_NETWORKS_LIST = validateNetworks(
   configuredEvmNetworks.length > 0 ? configuredEvmNetworks : DEFAULT_EVM_NETWORKS
