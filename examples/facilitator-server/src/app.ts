@@ -42,6 +42,7 @@ export const app = new Elysia({ adapter: node() })
    * Note: Payment tracking and bazaar discovery are handled by lifecycle hooks
    */
   .post("/verify", async ({ body, status }) => {
+    const startTime = Date.now();
     try {
       const { paymentPayload, paymentRequirements } = body as {
         paymentPayload?: PaymentPayload;
@@ -54,17 +55,85 @@ export const app = new Elysia({ adapter: node() })
         });
       }
 
+      const network = paymentRequirements.network || "unknown";
+      const scheme = paymentRequirements.scheme || "unknown";
+      console.log(
+        `[Verify] Starting verification: scheme=${scheme}, network=${network}`
+      );
+
+      // Verbose logging for debugging
+      console.log(
+        "[Verify] Payment payload authorization:",
+        JSON.stringify(paymentPayload.payload?.authorization, null, 2)
+      );
+      console.log(
+        "[Verify] Payment payload signature:",
+        paymentPayload.payload?.signature
+      );
+      console.log(
+        "[Verify] Payment payload accepted:",
+        JSON.stringify(paymentPayload.accepted, null, 2)
+      );
+      console.log(
+        "[Verify] Payment requirements:",
+        JSON.stringify(
+          {
+            scheme: paymentRequirements.scheme,
+            network: paymentRequirements.network,
+            amount: paymentRequirements.amount,
+            asset: paymentRequirements.asset,
+            payTo: paymentRequirements.payTo,
+            extra: paymentRequirements.extra,
+          },
+          null,
+          2
+        )
+      );
+      console.log(
+        "[Verify] Payment requirements extra (full):",
+        JSON.stringify(paymentRequirements.extra, null, 2)
+      );
+
       // Hooks will automatically:
       // - Track verified payment (onAfterVerify)
       // - Extract and catalog discovery info (onAfterVerify)
-      const response: VerifyResponse = await facilitator.verify(
-        paymentPayload,
-        paymentRequirements
+      const verifyStartTime = Date.now();
+      let response: VerifyResponse;
+      try {
+        response = await facilitator.verify(
+          paymentPayload,
+          paymentRequirements
+        );
+      } catch (verifyError) {
+        const verifyDuration = Date.now() - verifyStartTime;
+        console.error(
+          `[Verify] Exception during verification after ${verifyDuration}ms:`,
+          verifyError instanceof Error
+            ? verifyError.message
+            : String(verifyError),
+          verifyError instanceof Error ? verifyError.stack : undefined
+        );
+        throw verifyError;
+      }
+      const verifyDuration = Date.now() - verifyStartTime;
+
+      const totalDuration = Date.now() - startTime;
+      console.log(
+        `[Verify] Completed: isValid=${response.isValid}, invalidReason=${
+          response.invalidReason || "none"
+        }, payer=${
+          response.payer || "none"
+        }, duration=${verifyDuration}ms, total=${totalDuration}ms`
       );
 
       return response;
     } catch (error) {
-      console.error("Verify error:", error);
+      const totalDuration = Date.now() - startTime;
+      console.error(
+        `[Verify] Error after ${totalDuration}ms:`,
+        error instanceof Error ? error.message : String(error),
+        error instanceof Error ? error.stack : undefined
+      );
       return status(500, {
         error: error instanceof Error ? error.message : "Unknown error",
       });

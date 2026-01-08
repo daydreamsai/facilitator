@@ -17,16 +17,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const packagesDir = path.join(repoRoot, "packages");
+const examplesDir = path.join(repoRoot, "examples");
 
-function collectPackages(): PackageInfo[] {
-  if (!existsSync(packagesDir)) return [];
+function collectPackagesFromDir(baseDir: string): PackageInfo[] {
+  if (!existsSync(baseDir)) return [];
 
-  const entries = readdirSync(packagesDir, { withFileTypes: true });
+  const entries = readdirSync(baseDir, { withFileTypes: true });
   const results: PackageInfo[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const dir = path.join(packagesDir, entry.name);
+    const dir = path.join(baseDir, entry.name);
     const manifestPath = path.join(dir, "package.json");
     if (!existsSync(manifestPath)) continue;
 
@@ -42,6 +43,13 @@ function collectPackages(): PackageInfo[] {
   }
 
   return results;
+}
+
+function collectPackages(): PackageInfo[] {
+  return [
+    ...collectPackagesFromDir(packagesDir),
+    ...collectPackagesFromDir(examplesDir),
+  ];
 }
 
 async function exec(argv: string[], cwd: string) {
@@ -68,6 +76,7 @@ async function buildPackages() {
   // Build order - core first, then dependent packages
   const preferredOrder = [
     "@daydreamsai/facilitator",
+    "@daydreamsai/facilitator-server",
   ];
 
   const packagesByName = new Map(packages.map((pkg) => [pkg.name, pkg]));

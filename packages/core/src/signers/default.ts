@@ -51,6 +51,7 @@ const NETWORK_TO_CHAIN: Record<string, Chain> = {
   polygon,
   "polygon-amoy": polygonAmoy,
   sepolia,
+  "ethereum-sepolia": sepolia,
 };
 
 // ============================================================================
