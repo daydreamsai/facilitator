@@ -19,6 +19,12 @@ A production-ready payment settlement service for the [x402 protocol](https://gi
 - [Payment Schemes](#payment-schemes)
 - [Unified Client](#unified-client)
 - [Upto Module](#upto-module)
+  - [Architecture: Who Maintains What State?](#architecture-who-maintains-what-state)
+  - [Client Responsibilities](#client-responsibilities)
+  - [Facilitator Responsibilities](#facilitator-responsibilities)
+  - [Payment Flow Example](#payment-flow-example)
+  - [Recommended Integration Pattern](#recommended-integration-pattern)
+  - [State Persistence Considerations](#state-persistence-considerations)
 - [Resource Server](#resource-server)
 - [Framework Middleware](#framework-middleware)
   - [Elysia](#elysia)
@@ -695,6 +701,204 @@ throws if `typedData` is missing.
 ## Upto Module
 
 The upto module provides components for batched payment tracking on resource servers.
+
+### Architecture: Who Maintains What State?
+
+When building a service that uses the upto scheme, understanding state ownership is critical. The client and facilitator each maintain different pieces of state:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Upto Scheme State Ownership                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   YOUR SERVICE (Client)              FACILITATOR                            │
+│   ════════════════════               ═══════════                            │
+│                                                                             │
+│   ┌──────────────────┐               ┌──────────────────┐                  │
+│   │   PermitCache    │               │  Session Store   │                  │
+│   │  ┌────────────┐  │               │  ┌────────────┐  │                  │
+│   │  │ Signed     │  │   payment     │  │ pendingSpent│  │                  │
+│   │  │ Permit     │──┼───request────▶│  │ settledTotal│  │                  │
+│   │  │ (EIP-2612) │  │               │  │ cap/deadline│  │                  │
+│   │  └────────────┘  │               │  │ status      │  │                  │
+│   │                  │◀──────────────┼──└────────────┘  │                  │
+│   │  Invalidate on:  │  cap_exhausted │                  │                  │
+│   │  • cap_exhausted │  session_closed│  Sweeper settles │                  │
+│   │  • session_closed│               │  automatically   │                  │
+│   │  • deadline near │               │                  │                  │
+│   └──────────────────┘               └──────────────────┘                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+| Aspect | Your Service (Client) | Facilitator |
+|--------|----------------------|-------------|
+| **Stores** | Signed permit (EIP-2612 signature) | Session metadata (cap, pending, settled) |
+| **Reuses** | Same permit for multiple requests | Cap across payments until exhausted |
+| **Invalidates** | On error codes or deadline | On deadline, cap exhaustion, or explicit close |
+| **Persists** | Optional (in-memory is fine) | Required for production (Redis, PostgreSQL) |
+
+### Client Responsibilities
+
+Your service should maintain a **permit cache** for efficient permit reuse:
+
+```typescript
+// Pseudocode for client-side permit management
+interface CachedPermit {
+  signature: string;
+  cap: bigint;
+  deadline: bigint;
+  nonce: bigint;
+  network: string;
+  asset: string;
+}
+
+class PermitCache {
+  private cache = new Map<string, CachedPermit>();
+
+  // Key format: network:asset:owner:spender
+  get(key: string): CachedPermit | undefined {
+    const permit = this.cache.get(key);
+    if (!permit) return undefined;
+
+    // Pre-invalidate 60 seconds before deadline
+    const buffer = 60n;
+    if (BigInt(Math.floor(Date.now() / 1000)) + buffer >= permit.deadline) {
+      this.cache.delete(key);
+      return undefined;
+    }
+
+    return permit;
+  }
+
+  set(key: string, permit: CachedPermit): void {
+    this.cache.set(key, permit);
+  }
+
+  invalidate(key: string): void {
+    this.cache.delete(key);
+  }
+}
+```
+
+**When to invalidate permits:**
+
+| Facilitator Response | Action |
+|---------------------|--------|
+| `cap_exhausted` | Invalidate permit, sign new one with fresh cap |
+| `session_closed` | Invalidate permit, sign new one |
+| `settling_in_progress` | Retry after short delay (session temporarily locked) |
+| Success | Keep using cached permit |
+
+### Facilitator Responsibilities
+
+The facilitator maintains session state internally. You don't need to track:
+
+- **Pending spend** - How much has been charged but not yet settled on-chain
+- **Settled total** - How much has been settled on-chain
+- **Settlement timing** - When to batch and settle (handled by sweeper)
+
+**Session ID is deterministic:** The same permit signature always maps to the same session. This is how the facilitator correlates multiple payments under one cap.
+
+```typescript
+// Facilitator generates session ID from permit fields
+function generateSessionId(permit: PaymentPayload): string {
+  const key = {
+    network, asset, owner, spender, cap, nonce, deadline, signature
+  };
+  return sha256(JSON.stringify(key));
+}
+```
+
+### Payment Flow Example
+
+```
+1. Client: Check cache for valid permit
+   └─ Cache miss → Sign new EIP-2612 permit (cap: 50 USDC, deadline: 1 hour)
+   └─ Cache hit  → Reuse existing permit
+
+2. Client: Send payment request with permit
+   POST /verify → Facilitator validates signature
+
+3. Facilitator: Track payment internally
+   └─ First request  → Create session (cap=50, pending=10)
+   └─ Later requests → Update session (pending += amount)
+
+4. Facilitator Sweeper (background, every 30s):
+   └─ Idle > 2min with pending > 0    → Settle batch on-chain
+   └─ Deadline < 60s                   → Settle and close session
+   └─ (settled + pending) >= 90% cap  → Settle batch
+
+5. Client: Receives cap_exhausted
+   └─ Invalidate permit in cache
+   └─ Sign new permit
+   └─ Retry request
+```
+
+### Recommended Integration Pattern
+
+**Option 1: Use the built-in client (simplest)**
+
+The `createUnifiedClient` handles permit caching automatically:
+
+```typescript
+import { createUnifiedClient } from "@daydreamsai/facilitator/client";
+
+const { fetchWithPayment } = createUnifiedClient({
+  evmUpto: {
+    signer: account,
+    publicClient,
+    facilitatorUrl: "http://localhost:8090",
+  },
+});
+
+// Permit caching is automatic
+const response = await fetchWithPayment("https://api.example.com/premium");
+```
+
+**Option 2: Build custom permit management**
+
+Only do this if you need:
+- Cross-service permit sharing
+- Persistence across restarts
+- Custom invalidation logic
+
+```typescript
+// Custom integration pseudocode
+async function makePayment(amount: bigint) {
+  const cacheKey = `${network}:${asset}:${owner}:${facilitatorSigner}`;
+  let permit = permitCache.get(cacheKey);
+
+  if (!permit) {
+    permit = await signPermit({ cap: amount * 10n, deadline: 3600 });
+    permitCache.set(cacheKey, permit);
+  }
+
+  const response = await fetch(paidEndpoint, {
+    headers: { "X-Payment": encodePayment(permit, amount) }
+  });
+
+  if (response.status === 402) {
+    const error = await response.json();
+    if (error.code === "cap_exhausted" || error.code === "session_closed") {
+      permitCache.invalidate(cacheKey);
+      return makePayment(amount);  // Retry with new permit
+    }
+  }
+
+  return response;
+}
+```
+
+### State Persistence Considerations
+
+| Scenario | Client Storage | Facilitator Storage |
+|----------|---------------|---------------------|
+| Single instance, dev/test | In-memory | In-memory |
+| Single instance, production | In-memory (permits are cheap to re-sign) | Redis/PostgreSQL |
+| Multi-instance, production | Redis (share permits across instances) | Redis/PostgreSQL |
+
+**Key insight:** Client-side permit caching is an optimization, not a requirement. If you lose your cache, you just sign a new permit. Facilitator-side session state is critical - losing it means losing track of pending payments.
 
 ### Installation
 
