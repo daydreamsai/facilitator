@@ -926,7 +926,7 @@ const facilitatorClient = new HTTPFacilitatorClient({
 const upto = createUptoModule({
   facilitatorClient,
   // Optional: custom session store (defaults to InMemoryUptoSessionStore)
-  // store: new RedisSessionStore(),
+  // store: new RedisUptoSessionStore(redis),
   // Optional: sweeper configuration for auto settlement
   // sweeperConfig: { intervalMs: 30_000, idleSettleMs: 120_000 },
 });
@@ -940,7 +940,7 @@ app.use(upto.createSweeper());
 ```typescript
 import { trackUptoPayment, TRACKING_ERROR_STATUS } from "@daydreamsai/facilitator/upto";
 
-const result = trackUptoPayment(upto.store, paymentPayload, requirements);
+const result = await trackUptoPayment(upto.store, paymentPayload, requirements);
 
 if (!result.success) {
   // Handle error
@@ -961,19 +961,46 @@ Replace in-memory storage with persistent storage:
 import type { UptoSessionStore, UptoSession } from "@daydreamsai/facilitator/upto";
 
 class RedisSessionStore implements UptoSessionStore {
-  get(id: string): UptoSession | undefined {
+  async get(id: string): Promise<UptoSession | undefined> {
     /* Redis get */
   }
-  set(id: string, session: UptoSession): void {
+  async set(id: string, session: UptoSession): Promise<void> {
     /* Redis set */
   }
-  delete(id: string): void {
+  async delete(id: string): Promise<void> {
     /* Redis del */
   }
-  entries(): IterableIterator<[string, UptoSession]> {
+  async *entries(): AsyncIterableIterator<[string, UptoSession]> {
     /* Redis scan */
   }
 }
+```
+
+Or use the built-in Redis store + global sweeper lock:
+
+```typescript
+import {
+  RedisUptoSessionStore,
+  createRedisSweeperLock,
+} from "@daydreamsai/facilitator/upto";
+
+const store = new RedisUptoSessionStore(redis, {
+  keyPrefix: "facilitator:upto",
+});
+
+const sweeperLock = createRedisSweeperLock(redis, {
+  key: "facilitator:upto:sweeper:lock",
+  ttlMs: 60_000,
+});
+
+const upto = createUptoModule({
+  facilitatorClient,
+  store,
+  sweeperConfig: {
+    lock: sweeperLock,
+    settlingTimeoutMs: 300_000,
+  },
+});
 ```
 
 ## Resource Server

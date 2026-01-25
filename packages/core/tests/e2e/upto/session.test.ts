@@ -167,7 +167,7 @@ describe("Upto Session E2E", () => {
     expect(body.message).toBe("premium upto content");
   });
 
-  test("tracks payment in session store", () => {
+  test("tracks payment in session store", async () => {
     const deadline = Math.floor(Date.now() / 1000) + 3600;
     const paymentPayload = createTestUptoPayload(
       MOCK_PAYER_ADDRESS,
@@ -184,18 +184,22 @@ describe("Upto Session E2E", () => {
       payTo: MOCK_FACILITATOR_ADDRESS,
     };
 
-    const result = trackUptoPayment(sessionStore, paymentPayload, requirements);
+    const result = await trackUptoPayment(
+      sessionStore,
+      paymentPayload,
+      requirements
+    );
 
     expect(result.success).toBe(true);
     expect(result.sessionId).toBeTruthy();
 
-    const session = sessionStore.get(result.sessionId);
+    const session = await sessionStore.get(result.sessionId);
     expect(session).toBeDefined();
     expect(session!.status).toBe("open");
     expect(session!.pendingSpent).toBe(parseUnits("0.01", 6));
   });
 
-  test("accumulates spend across multiple requests", () => {
+  test("accumulates spend across multiple requests", async () => {
     const deadline = Math.floor(Date.now() / 1000) + 3600;
     const paymentPayload = createTestUptoPayload(
       MOCK_PAYER_ADDRESS,
@@ -205,7 +209,7 @@ describe("Upto Session E2E", () => {
     );
 
     // Request 1: $0.01
-    const result1 = trackUptoPayment(sessionStore, paymentPayload, {
+    const result1 = await trackUptoPayment(sessionStore, paymentPayload, {
       scheme: "upto",
       network: E2E_CONFIG.evm.network,
       asset: E2E_CONFIG.evm.usdc,
@@ -216,7 +220,7 @@ describe("Upto Session E2E", () => {
     const sessionId = result1.sessionId;
 
     // Request 2: $0.02
-    const result2 = trackUptoPayment(sessionStore, paymentPayload, {
+    const result2 = await trackUptoPayment(sessionStore, paymentPayload, {
       scheme: "upto",
       network: E2E_CONFIG.evm.network,
       asset: E2E_CONFIG.evm.usdc,
@@ -227,11 +231,11 @@ describe("Upto Session E2E", () => {
     expect(result2.sessionId).toBe(sessionId);
 
     // Check accumulated
-    const session = sessionStore.get(sessionId);
+    const session = await sessionStore.get(sessionId);
     expect(session!.pendingSpent).toBe(parseUnits("0.03", 6));
   });
 
-  test("rejects when cap exhausted", () => {
+  test("rejects when cap exhausted", async () => {
     const deadline = Math.floor(Date.now() / 1000) + 3600;
     const paymentPayload = createTestUptoPayload(
       MOCK_PAYER_ADDRESS,
@@ -241,7 +245,7 @@ describe("Upto Session E2E", () => {
     );
 
     // Request 1: $0.015
-    const result1 = trackUptoPayment(sessionStore, paymentPayload, {
+    const result1 = await trackUptoPayment(sessionStore, paymentPayload, {
       scheme: "upto",
       network: E2E_CONFIG.evm.network,
       asset: E2E_CONFIG.evm.usdc,
@@ -251,7 +255,7 @@ describe("Upto Session E2E", () => {
     expect(result1.success).toBe(true);
 
     // Request 2: $0.01 (would exceed cap)
-    const result2 = trackUptoPayment(sessionStore, paymentPayload, {
+    const result2 = await trackUptoPayment(sessionStore, paymentPayload, {
       scheme: "upto",
       network: E2E_CONFIG.evm.network,
       asset: E2E_CONFIG.evm.usdc,
@@ -263,7 +267,7 @@ describe("Upto Session E2E", () => {
     expect((result2 as TrackingResult & { success: false }).error).toBe("cap_exhausted");
   });
 
-  test("rejects requests after session closed", () => {
+  test("rejects requests after session closed", async () => {
     const deadline = Math.floor(Date.now() / 1000) + 3600;
     const paymentPayload = createTestUptoPayload(
       MOCK_PAYER_ADDRESS,
@@ -273,7 +277,7 @@ describe("Upto Session E2E", () => {
     );
 
     // Create session
-    const result1 = trackUptoPayment(sessionStore, paymentPayload, {
+    const result1 = await trackUptoPayment(sessionStore, paymentPayload, {
       scheme: "upto",
       network: E2E_CONFIG.evm.network,
       asset: E2E_CONFIG.evm.usdc,
@@ -284,12 +288,12 @@ describe("Upto Session E2E", () => {
     const sessionId = result1.sessionId;
 
     // Manually close session
-    const session = sessionStore.get(sessionId)!;
+    const session = (await sessionStore.get(sessionId))!;
     session.status = "closed";
-    sessionStore.set(sessionId, session);
+    await sessionStore.set(sessionId, session);
 
     // Try another request
-    const result2 = trackUptoPayment(sessionStore, paymentPayload, {
+    const result2 = await trackUptoPayment(sessionStore, paymentPayload, {
       scheme: "upto",
       network: E2E_CONFIG.evm.network,
       asset: E2E_CONFIG.evm.usdc,
@@ -301,7 +305,7 @@ describe("Upto Session E2E", () => {
     expect((result2 as TrackingResult & { success: false }).error).toBe("session_closed");
   });
 
-  test("rejects requests while settling", () => {
+  test("rejects requests while settling", async () => {
     const deadline = Math.floor(Date.now() / 1000) + 3600;
     const paymentPayload = createTestUptoPayload(
       MOCK_PAYER_ADDRESS,
@@ -311,7 +315,7 @@ describe("Upto Session E2E", () => {
     );
 
     // Create session
-    const result1 = trackUptoPayment(sessionStore, paymentPayload, {
+    const result1 = await trackUptoPayment(sessionStore, paymentPayload, {
       scheme: "upto",
       network: E2E_CONFIG.evm.network,
       asset: E2E_CONFIG.evm.usdc,
@@ -322,12 +326,12 @@ describe("Upto Session E2E", () => {
     const sessionId = result1.sessionId;
 
     // Set session to settling
-    const session = sessionStore.get(sessionId)!;
+    const session = (await sessionStore.get(sessionId))!;
     session.status = "settling";
-    sessionStore.set(sessionId, session);
+    await sessionStore.set(sessionId, session);
 
     // Try another request
-    const result2 = trackUptoPayment(sessionStore, paymentPayload, {
+    const result2 = await trackUptoPayment(sessionStore, paymentPayload, {
       scheme: "upto",
       network: E2E_CONFIG.evm.network,
       asset: E2E_CONFIG.evm.usdc,

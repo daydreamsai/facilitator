@@ -289,24 +289,24 @@ describe("Sweeper Logic", () => {
   });
 
   describe("session deletion after long idle", () => {
-    it("should delete session after long idle close", () => {
+    it("should delete session after long idle close", async () => {
       const nowMs = Date.now();
       const session = createMockSession({
         status: "open",
         pendingSpent: 0n,
         lastActivityMs: nowMs - longIdleCloseMs - 1000,
       });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       // Simulate sweep deletion logic
       const idleMs = nowMs - session.lastActivityMs;
       if (idleMs >= longIdleCloseMs) {
         session.status = "closed";
-        store.set("session-1", session);
-        store.delete("session-1");
+        await store.set("session-1", session);
+        await store.delete("session-1");
       }
 
-      expect(store.get("session-1")).toBeUndefined();
+      expect(await store.get("session-1")).toBeUndefined();
     });
   });
 

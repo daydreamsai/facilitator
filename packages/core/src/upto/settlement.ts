@@ -18,23 +18,32 @@ export async function settleUptoSession(
   sessionId: string,
   reason: string,
   closeAfter = false,
-  deadlineBufferSec = 60
+  deadlineBufferSec = 60,
+  settlingTimeoutMs = 5 * 60 * 1000
 ) {
-  const session = store.get(sessionId);
+  const session = await store.get(sessionId);
   if (!session) return;
-  if (session.status === "settling") return;
-  const initialStatus = session.status;
+  if (session.status === "settling") {
+    const settlingSinceMs = session.settlingSinceMs ?? session.lastActivityMs;
+    const isStale = Date.now() - settlingSinceMs >= settlingTimeoutMs;
+    if (!isStale) return;
+  }
+  const initialStatus = session.status === "settling" ? "open" : session.status;
 
   if (session.pendingSpent <= 0n) {
     if (closeAfter) {
       session.status = "closed";
-      store.set(sessionId, session);
+    } else if (session.status === "settling") {
+      session.status = "open";
     }
+    session.settlingSinceMs = undefined;
+    await store.set(sessionId, session);
     return;
   }
 
   session.status = "settling";
-  store.set(sessionId, session);
+  session.settlingSinceMs = Date.now();
+  await store.set(sessionId, session);
 
   const settleAmount = session.pendingSpent;
   const settleRequirements: PaymentRequirements = {
@@ -87,5 +96,9 @@ export async function settleUptoSession(
     session.status = closeAfter ? "closed" : initialStatus;
   }
 
-  store.set(sessionId, session);
+  if (session.status !== "settling") {
+    session.settlingSinceMs = undefined;
+  }
+
+  await store.set(sessionId, session);
 }

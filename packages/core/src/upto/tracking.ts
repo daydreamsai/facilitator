@@ -57,7 +57,11 @@ export const TRACKING_ERROR_STATUS: Record<TrackingError, number> = {
  *
  * @example
  * ```typescript
- * const result = trackUptoPayment(upto.store, paymentPayload, requirements);
+ * const result = await trackUptoPayment(
+ *   upto.store,
+ *   paymentPayload,
+ *   requirements
+ * );
  *
  * if (!result.success) {
  *   return { error: result.error, message: TRACKING_ERROR_MESSAGES[result.error] };
@@ -67,11 +71,11 @@ export const TRACKING_ERROR_STATUS: Record<TrackingError, number> = {
  * console.log(`Session ${result.sessionId} updated`);
  * ```
  */
-export function trackUptoPayment(
+export async function trackUptoPayment(
   store: UptoSessionStore,
   paymentPayload: PaymentPayload,
   requirements: PaymentRequirements
-): TrackingResult {
+): Promise<TrackingResult> {
   const sessionId = generateSessionId(paymentPayload);
   const auth = extractUptoAuthorization(paymentPayload);
 
@@ -84,7 +88,7 @@ export function trackUptoPayment(
   const price = BigInt(requirements.amount);
 
   // Get existing session or create new one
-  let session = store.get(sessionId);
+  let session = await store.get(sessionId);
 
   if (!session) {
     session = {
@@ -119,7 +123,7 @@ export function trackUptoPayment(
   session.lastActivityMs = Date.now();
   session.paymentPayload = paymentPayload;
   session.paymentRequirements = requirements;
-  store.set(sessionId, session);
+  await store.set(sessionId, session);
 
   return { success: true, sessionId, session };
 }

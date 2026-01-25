@@ -38,85 +38,85 @@ describe("InMemoryUptoSessionStore", () => {
   });
 
   describe("get", () => {
-    it("returns undefined for non-existent session", () => {
-      expect(store.get("non-existent")).toBeUndefined();
+    it("returns undefined for non-existent session", async () => {
+      expect(await store.get("non-existent")).toBeUndefined();
     });
 
-    it("returns session after it is set", () => {
+    it("returns session after it is set", async () => {
       const session = createMockSession();
-      store.set("session-1", session);
-      expect(store.get("session-1")).toBe(session);
+      await store.set("session-1", session);
+      expect(await store.get("session-1")).toBe(session);
     });
   });
 
   describe("set", () => {
-    it("stores a new session", () => {
+    it("stores a new session", async () => {
       const session = createMockSession();
-      store.set("session-1", session);
-      expect(store.get("session-1")).toBe(session);
+      await store.set("session-1", session);
+      expect(await store.get("session-1")).toBe(session);
     });
 
-    it("overwrites an existing session", () => {
+    it("overwrites an existing session", async () => {
       const session1 = createMockSession({ cap: 1000n });
       const session2 = createMockSession({ cap: 2000n });
 
-      store.set("session-1", session1);
-      store.set("session-1", session2);
+      await store.set("session-1", session1);
+      await store.set("session-1", session2);
 
-      expect(store.get("session-1")?.cap).toBe(2000n);
+      expect((await store.get("session-1"))?.cap).toBe(2000n);
     });
 
-    it("stores multiple sessions independently", () => {
+    it("stores multiple sessions independently", async () => {
       const session1 = createMockSession({ cap: 1000n });
       const session2 = createMockSession({ cap: 2000n });
 
-      store.set("session-1", session1);
-      store.set("session-2", session2);
+      await store.set("session-1", session1);
+      await store.set("session-2", session2);
 
-      expect(store.get("session-1")?.cap).toBe(1000n);
-      expect(store.get("session-2")?.cap).toBe(2000n);
+      expect((await store.get("session-1"))?.cap).toBe(1000n);
+      expect((await store.get("session-2"))?.cap).toBe(2000n);
     });
   });
 
   describe("delete", () => {
-    it("removes an existing session", () => {
+    it("removes an existing session", async () => {
       const session = createMockSession();
-      store.set("session-1", session);
-      store.delete("session-1");
-      expect(store.get("session-1")).toBeUndefined();
+      await store.set("session-1", session);
+      await store.delete("session-1");
+      expect(await store.get("session-1")).toBeUndefined();
     });
 
     it("does not throw when deleting non-existent session", () => {
       expect(() => store.delete("non-existent")).not.toThrow();
     });
 
-    it("only removes the specified session", () => {
+    it("only removes the specified session", async () => {
       const session1 = createMockSession();
       const session2 = createMockSession();
 
-      store.set("session-1", session1);
-      store.set("session-2", session2);
-      store.delete("session-1");
+      await store.set("session-1", session1);
+      await store.set("session-2", session2);
+      await store.delete("session-1");
 
-      expect(store.get("session-1")).toBeUndefined();
-      expect(store.get("session-2")).toBe(session2);
+      expect(await store.get("session-1")).toBeUndefined();
+      expect(await store.get("session-2")).toBe(session2);
     });
   });
 
   describe("entries", () => {
-    it("returns empty iterator when store is empty", () => {
+    it("returns empty iterator when store is empty", async () => {
       const entries = Array.from(store.entries());
       expect(entries).toHaveLength(0);
     });
 
-    it("returns all stored sessions", () => {
+    it("returns all stored sessions", async () => {
       const session1 = createMockSession({ cap: 1000n });
       const session2 = createMockSession({ cap: 2000n });
       const session3 = createMockSession({ cap: 3000n });
 
-      store.set("session-1", session1);
-      store.set("session-2", session2);
-      store.set("session-3", session3);
+      await store.set("session-1", session1);
+      await store.set("session-2", session2);
+      await store.set("session-3", session3);
 
       const entries = Array.from(store.entries());
       expect(entries).toHaveLength(3);
@@ -127,9 +127,9 @@ describe("InMemoryUptoSessionStore", () => {
       expect(ids).toContain("session-3");
     });
 
-    it("provides iterable iterator", () => {
+    it("provides iterable iterator", async () => {
       const session = createMockSession();
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       let count = 0;
       for (const [id, sess] of store.entries()) {
@@ -142,38 +142,38 @@ describe("InMemoryUptoSessionStore", () => {
   });
 
   describe("session status transitions", () => {
-    it("allows status update from open to settling", () => {
+    it("allows status update from open to settling", async () => {
       const session = createMockSession({ status: "open" });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       session.status = "settling";
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
-      expect(store.get("session-1")?.status).toBe("settling");
+      expect((await store.get("session-1"))?.status).toBe("settling");
     });
 
-    it("allows status update from settling to closed", () => {
+    it("allows status update from settling to closed", async () => {
       const session = createMockSession({ status: "settling" });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       session.status = "closed";
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
-      expect(store.get("session-1")?.status).toBe("closed");
+      expect((await store.get("session-1"))?.status).toBe("closed");
     });
 
-    it("tracks pendingSpent and settledTotal independently", () => {
+    it("tracks pendingSpent and settledTotal independently", async () => {
       const session = createMockSession({
         pendingSpent: 100n,
         settledTotal: 500n,
       });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       session.pendingSpent = 200n;
       session.settledTotal = 600n;
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
-      const retrieved = store.get("session-1");
+      const retrieved = await store.get("session-1");
       expect(retrieved?.pendingSpent).toBe(200n);
       expect(retrieved?.settledTotal).toBe(600n);
     });

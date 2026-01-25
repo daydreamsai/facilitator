@@ -1,6 +1,15 @@
 import { Elysia } from "elysia";
-import type { UptoSessionStore } from "./store.js";
+import type {
+  UptoSessionEntries,
+  UptoSession,
+  UptoSessionStore,
+} from "./store.js";
 import { settleUptoSession, type UptoFacilitatorClient } from "./settlement.js";
+
+export interface UptoSweeperLock {
+  acquire: () => Promise<boolean>;
+  release: () => Promise<void>;
+}
 
 export interface UptoSweeperConfig {
   store: UptoSessionStore;
@@ -11,6 +20,25 @@ export interface UptoSweeperConfig {
   capThresholdNum?: bigint;
   capThresholdDen?: bigint;
   intervalMs?: number;
+  settlingTimeoutMs?: number;
+  lock?: UptoSweeperLock;
+}
+
+async function* toAsyncEntries(
+  entries: UptoSessionEntries
+): AsyncIterableIterator<[string, UptoSession]> {
+  if (Symbol.asyncIterator in entries) {
+    for await (const entry of entries as AsyncIterableIterator<
+      [string, UptoSession]
+    >) {
+      yield entry;
+    }
+    return;
+  }
+
+  for (const entry of entries as IterableIterator<[string, UptoSession]>) {
+    yield entry;
+  }
 }
 
 export function createUptoSweeper(config: UptoSweeperConfig) {
@@ -20,87 +48,117 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
   const capThresholdNum = config.capThresholdNum ?? 9n;
   const capThresholdDen = config.capThresholdDen ?? 10n;
   const intervalMs = config.intervalMs ?? 30 * 1000;
+  const settlingTimeoutMs = config.settlingTimeoutMs ?? 5 * 60 * 1000;
 
   let interval: NodeJS.Timeout | undefined;
 
-  const sweep = () => {
-    const nowMs = Date.now();
-    const nowSec = BigInt(Math.floor(nowMs / 1000));
+  const sweep = async () => {
+    if (config.lock) {
+      const acquired = await config.lock.acquire();
+      if (!acquired) return;
+    }
 
-    for (const [id, session] of config.store.entries()) {
-      if (session.status === "settling") continue;
+    try {
+      const nowMs = Date.now();
+      const nowSec = BigInt(Math.floor(nowMs / 1000));
 
-      const idleMs = nowMs - session.lastActivityMs;
-      const timeToDeadline = session.deadline - nowSec;
-      const totalOutstanding = session.settledTotal + session.pendingSpent;
+      for await (const [id, session] of toAsyncEntries(config.store.entries())) {
+        const settlingSinceMs = session.settlingSinceMs ?? session.lastActivityMs;
+        if (session.status === "settling") {
+          const isStale = nowMs - settlingSinceMs >= settlingTimeoutMs;
+          if (!isStale) continue;
 
-      if (session.status === "open" && session.pendingSpent > 0n) {
-        if (idleMs >= idleSettleMs) {
           void settleUptoSession(
             config.store,
             config.facilitatorClient,
             id,
-            "idle_timeout",
+            "settling_timeout",
             false,
-            deadlineBufferSec
+            deadlineBufferSec,
+            settlingTimeoutMs
           );
           continue;
         }
 
-        if (timeToDeadline <= BigInt(deadlineBufferSec)) {
-          void settleUptoSession(
-            config.store,
-            config.facilitatorClient,
-            id,
-            "deadline_buffer",
-            true,
-            deadlineBufferSec
-          );
-          continue;
+        const idleMs = nowMs - session.lastActivityMs;
+        const timeToDeadline = session.deadline - nowSec;
+        const totalOutstanding = session.settledTotal + session.pendingSpent;
+
+        if (session.status === "open" && session.pendingSpent > 0n) {
+          if (idleMs >= idleSettleMs) {
+            void settleUptoSession(
+              config.store,
+              config.facilitatorClient,
+              id,
+              "idle_timeout",
+              false,
+              deadlineBufferSec,
+              settlingTimeoutMs
+            );
+            continue;
+          }
+
+          if (timeToDeadline <= BigInt(deadlineBufferSec)) {
+            void settleUptoSession(
+              config.store,
+              config.facilitatorClient,
+              id,
+              "deadline_buffer",
+              true,
+              deadlineBufferSec,
+              settlingTimeoutMs
+            );
+            continue;
+          }
+
+          if (
+            totalOutstanding * capThresholdDen >=
+            session.cap * capThresholdNum
+          ) {
+            void settleUptoSession(
+              config.store,
+              config.facilitatorClient,
+              id,
+              "cap_threshold",
+              false,
+              deadlineBufferSec,
+              settlingTimeoutMs
+            );
+            continue;
+          }
         }
 
         if (
-          totalOutstanding * capThresholdDen >=
-          session.cap * capThresholdNum
+          idleMs >= longIdleCloseMs ||
+          timeToDeadline <= 0n ||
+          session.settledTotal >= session.cap
         ) {
-          void settleUptoSession(
-            config.store,
-            config.facilitatorClient,
-            id,
-            "cap_threshold",
-            false,
-            deadlineBufferSec
-          );
-          continue;
+          if (session.pendingSpent > 0n && session.status === "open") {
+            void settleUptoSession(
+              config.store,
+              config.facilitatorClient,
+              id,
+              "auto_close",
+              true,
+              deadlineBufferSec,
+              settlingTimeoutMs
+            );
+          } else {
+            session.status = "closed";
+            session.settlingSinceMs = undefined;
+            await config.store.set(id, session);
+            if (idleMs >= longIdleCloseMs) await config.store.delete(id);
+          }
         }
       }
-
-      if (
-        idleMs >= longIdleCloseMs ||
-        timeToDeadline <= 0n ||
-        session.settledTotal >= session.cap
-      ) {
-        if (session.pendingSpent > 0n && session.status === "open") {
-          void settleUptoSession(
-            config.store,
-            config.facilitatorClient,
-            id,
-            "auto_close",
-            true,
-            deadlineBufferSec
-          );
-        } else {
-          session.status = "closed";
-          config.store.set(id, session);
-          if (idleMs >= longIdleCloseMs) config.store.delete(id);
-        }
-      }
+    } finally {
+      if (config.lock) await config.lock.release();
     }
   };
 
   return new Elysia({ name: "upto.sweeper" })
     .onStart(() => {
-      interval = setInterval(sweep, intervalMs);
+      interval = setInterval(() => void sweep(), intervalMs);
     })
     .onStop(() => {
       if (interval) clearInterval(interval);

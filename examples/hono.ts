@@ -1,17 +1,21 @@
 import { Hono } from "hono";
 import { paymentMiddleware } from "@x402/hono";
 import { HTTPFacilitatorClient } from "@x402/core/http";
+import Redis from "ioredis";
 
 import { createPrivateKeyEvmSigner } from "@daydreamsai/facilitator/signers";
 import { getRpcUrl } from "@daydreamsai/facilitator/config";
 import { createResourceServer } from "@daydreamsai/facilitator/server";
 import {
+  RedisUptoSessionStore,
   InMemoryUptoSessionStore,
   settleUptoSession,
   trackUptoPayment,
 } from "@daydreamsai/facilitator/upto";
 
 const facilitatorUrl = process.env.FACILITATOR_URL ?? "http://localhost:8090";
+const REDIS_URL = process.env.REDIS_URL;
+const REDIS_PREFIX = process.env.REDIS_PREFIX ?? "facilitator:upto";
 const evmRpcUrl = getRpcUrl("base") ?? "https://mainnet.base.org";
 const evmSigner = createPrivateKeyEvmSigner({
   network: "base",
@@ -30,7 +34,10 @@ const resourceServer = createResourceServer(facilitatorClient);
 resourceServer.initialize();
 
 // Session store for upto scheme batched payments
-const uptoStore = new InMemoryUptoSessionStore();
+const redis = REDIS_URL ? new Redis(REDIS_URL) : undefined;
+const uptoStore = redis
+  ? new RedisUptoSessionStore(redis, { keyPrefix: REDIS_PREFIX })
+  : new InMemoryUptoSessionStore();
 
 // Register hook to track upto sessions after verification
 resourceServer.onAfterVerify(async (ctx) => {
@@ -38,7 +45,7 @@ resourceServer.onAfterVerify(async (ctx) => {
   if (!ctx.result.isValid) return;
 
   // Track the session (errors are logged but don't block the request)
-  const result = trackUptoPayment(
+  const result = await trackUptoPayment(
     uptoStore,
     ctx.paymentPayload,
     ctx.requirements
@@ -99,8 +106,8 @@ app.get("/weather", (c) => c.json({ weather: "sunny", temperature: 70 }));
 app.get("/premium/data", (c) => c.json({ data: "premium content" }));
 
 // Session status endpoint
-app.get("/upto/session/:id", (c) => {
-  const session = uptoStore.get(c.req.param("id"));
+app.get("/upto/session/:id", async (c) => {
+  const session = await uptoStore.get(c.req.param("id"));
   if (!session) return c.json({ error: "unknown_session" }, 404);
 
   return c.json({
@@ -118,7 +125,7 @@ app.post("/upto/close", async (c) => {
   const { sessionId } = await c.req.json<{ sessionId?: string }>();
   if (!sessionId) return c.json({ error: "missing_session_id" }, 400);
 
-  const session = uptoStore.get(sessionId);
+  const session = await uptoStore.get(sessionId);
   if (!session) return c.json({ error: "unknown_session" }, 404);
 
   await settleUptoSession(
@@ -130,7 +137,9 @@ app.post("/upto/close", async (c) => {
   );
 
   return c.json(
-    uptoStore.get(sessionId)?.lastSettlement?.receipt ?? { success: true }
+    (await uptoStore.get(sessionId))?.lastSettlement?.receipt ?? {
+      success: true,
+    }
   );
 });
 

@@ -57,6 +57,7 @@ export interface UptoModuleConfig {
   /**
    * Default sweeper configuration (optional).
    * Use this to control sweep cadence and thresholds.
+   * Also supports settling timeout and optional distributed lock.
    */
   sweeperConfig?: UptoSweeperOverrides;
 

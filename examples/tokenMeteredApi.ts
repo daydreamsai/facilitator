@@ -11,15 +11,24 @@
  * Environment:
  *   - PORT: Server port (default: 4024)
  *   - FACILITATOR_URL: Facilitator URL (default: http://localhost:8090)
+ *   - REDIS_URL: Redis connection URL (optional)
+ *   - REDIS_PREFIX: Redis key prefix (optional)
+ *   - REDIS_SWEEPER_LOCK_KEY: Redis lock key (optional)
  *   - OPENAI_API_KEY: OpenAI API key (optional, uses mock if not set)
  */
 
 import { Elysia, t } from "elysia";
 import { node } from "@elysiajs/node";
 import { HTTPFacilitatorClient } from "@x402/core/http";
+import Redis from "ioredis";
 
 import { createElysiaPaymentMiddleware } from "@daydreamsai/facilitator/elysia";
-import { createUptoModule, formatSession } from "@daydreamsai/facilitator/upto";
+import {
+  createUptoModule,
+  createRedisSweeperLock,
+  RedisUptoSessionStore,
+  formatSession,
+} from "@daydreamsai/facilitator/upto";
 import { createPrivateKeyEvmSigner } from "@daydreamsai/facilitator/signers";
 import { createResourceServer } from "@daydreamsai/facilitator/server";
 import { getRpcUrl } from "@daydreamsai/facilitator/config";
@@ -34,6 +43,10 @@ import {
 
 const PORT = Number(4024);
 const FACILITATOR_URL = process.env.FACILITATOR_URL ?? "http://localhost:8090";
+const REDIS_URL = process.env.REDIS_URL;
+const REDIS_PREFIX = process.env.REDIS_PREFIX ?? "facilitator:upto";
+const REDIS_SWEEPER_LOCK_KEY =
+  process.env.REDIS_SWEEPER_LOCK_KEY ?? `${REDIS_PREFIX}:sweeper:lock`;
 
 // Pricing in USDC units (6 decimals) per 1K tokens
 const PRICE_PER_1K_INPUT = BigInt(process.env.PRICE_PER_1K_INPUT ?? "150"); // $0.00015
@@ -58,10 +71,23 @@ const [payTo] = evmSigner.getAddresses();
 const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
 const resourceServer = createResourceServer(facilitatorClient);
 
+const redis = REDIS_URL ? new Redis(REDIS_URL) : undefined;
+const sessionStore = redis
+  ? new RedisUptoSessionStore(redis, { keyPrefix: REDIS_PREFIX })
+  : undefined;
+const sweeperLock = redis
+  ? createRedisSweeperLock(redis, { key: REDIS_SWEEPER_LOCK_KEY })
+  : undefined;
+
 // Upto module - autoTrack: false since we track manually after knowing token usage
 const upto = createUptoModule({
+  ...(sessionStore ? { store: sessionStore } : {}),
   facilitatorClient,
-  sweeperConfig: { intervalMs: 30_000, idleSettleMs: 2 * 60_000 },
+  sweeperConfig: {
+    intervalMs: 30_000,
+    idleSettleMs: 2 * 60_000,
+    ...(sweeperLock ? { lock: sweeperLock } : {}),
+  },
   autoSweeper: true,
   autoTrack: false,
 });
@@ -102,8 +128,8 @@ function formatUsd(units: bigint): string {
   return `$${(Number(units) / 1_000_000).toFixed(6)}`;
 }
 
-function trackTokenCost(sessionId: string, cost: bigint): boolean {
-  const session = upto.store.get(sessionId);
+async function trackTokenCost(sessionId: string, cost: bigint): Promise<boolean> {
+  const session = await upto.store.get(sessionId);
   if (!session || session.status !== "open") return false;
 
   const nextTotal = session.settledTotal + session.pendingSpent + cost;
@@ -111,7 +137,7 @@ function trackTokenCost(sessionId: string, cost: bigint): boolean {
 
   session.pendingSpent += cost;
   session.lastActivityMs = Date.now();
-  upto.store.set(sessionId, session);
+  await upto.store.set(sessionId, session);
   return true;
 }
 
@@ -160,16 +186,16 @@ const app = new Elysia({ adapter: node() })
     payTo,
   }))
   .get("/health", () => ({ status: "ok", facilitator: FACILITATOR_URL }))
-  .get("/session/:id", ({ params }) => {
-    const session = upto.store.get(params.id);
+  .get("/session/:id", async ({ params }) => {
+    const session = await upto.store.get(params.id);
     if (!session) return { error: "not_found" };
     return { id: params.id, ...formatSession(session) };
   })
   .post("/session/:id/close", async ({ params }) => {
-    const session = upto.store.get(params.id);
+    const session = await upto.store.get(params.id);
     if (!session) return { error: "not_found" };
     await upto.settleSession(params.id, "manual_close", true);
-    const updated = upto.store.get(params.id);
+    const updated = await upto.store.get(params.id);
     const receipt = updated?.lastSettlement?.receipt;
     return {
       success: receipt?.success ?? false,
@@ -179,9 +205,9 @@ const app = new Elysia({ adapter: node() })
       error: receipt?.errorReason || null,
     };
   })
-  .get("/sessions", () => {
+  .get("/sessions", async () => {
     const list: Array<{ id: string; status: string; spent: string }> = [];
-    for (const [id, s] of upto.store.entries()) {
+    for await (const [id, s] of upto.store.entries()) {
       list.push({
         id: id.slice(0, 16) + "...",
         status: s.status,
@@ -223,7 +249,7 @@ const app = new Elysia({ adapter: node() })
       }
 
       // Initialize session if new
-      let session = upto.store.get(sessionId);
+      let session = await upto.store.get(sessionId);
       if (!session) {
         session = {
           cap: BigInt(auth.value),
@@ -235,7 +261,7 @@ const app = new Elysia({ adapter: node() })
           paymentPayload,
           paymentRequirements,
         };
-        upto.store.set(sessionId, session);
+        await upto.store.set(sessionId, session);
       }
 
       if (session.status !== "open") {
@@ -249,12 +275,12 @@ const app = new Elysia({ adapter: node() })
       // Calculate and track cost
       const cost = calculatePrice(llm.promptTokens, llm.completionTokens);
 
-      if (!trackTokenCost(sessionId, cost)) {
+      if (!(await trackTokenCost(sessionId, cost))) {
         set.status = 402;
         return { error: "cap_exhausted", cost: formatUsd(cost) };
       }
 
-      const updated = upto.store.get(sessionId)!;
+      const updated = (await upto.store.get(sessionId))!;
       set.headers["x-upto-session-id"] = sessionId;
       set.headers["x-token-cost"] = cost.toString();
 

@@ -72,18 +72,45 @@ describe("settleUptoSession", () => {
     });
 
     it("returns early if session is already settling", async () => {
-      const session = createMockSession({ status: "settling" });
-      store.set("session-1", session);
+      const session = createMockSession({
+        status: "settling",
+        settlingSinceMs: Date.now(),
+      });
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
       expect(settleMock).not.toHaveBeenCalled();
     });
   });
 
+  describe("settling timeout", () => {
+    it("skips settlement when settling is recent", async () => {
+      const session = createMockSession({
+        status: "settling",
+        settlingSinceMs: Date.now(),
+      });
+      await store.set("session-1", session);
+
+      await settleUptoSession(store, mockClient, "session-1", "test", false, 60, 1000);
+      expect(settleMock).not.toHaveBeenCalled();
+    });
+
+    it("retries settlement when settling is stale", async () => {
+      const session = createMockSession({
+        status: "settling",
+        settlingSinceMs: Date.now() - 10_000,
+      });
+      await store.set("session-1", session);
+
+      await settleUptoSession(store, mockClient, "session-1", "test", false, 60, 1000);
+      expect(settleMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("zero pending amount", () => {
     it("returns early if pendingSpent is zero", async () => {
       const session = createMockSession({ pendingSpent: 0n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
       expect(settleMock).not.toHaveBeenCalled();
@@ -91,10 +118,10 @@ describe("settleUptoSession", () => {
 
     it("closes session if closeAfter is true and pendingSpent is zero", async () => {
       const session = createMockSession({ pendingSpent: 0n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test", true);
-      expect(store.get("session-1")?.status).toBe("closed");
+      expect((await store.get("session-1"))?.status).toBe("closed");
       expect(settleMock).not.toHaveBeenCalled();
     });
   });
@@ -102,7 +129,7 @@ describe("settleUptoSession", () => {
   describe("successful settlement", () => {
     it("calls facilitator settle with correct parameters", async () => {
       const session = createMockSession({ pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test_reason");
 
@@ -117,39 +144,39 @@ describe("settleUptoSession", () => {
         pendingSpent: 100n,
         settledTotal: 200n,
       });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 
-      const updated = store.get("session-1");
+      const updated = await store.get("session-1");
       expect(updated?.settledTotal).toBe(300n);
     });
 
     it("resets pendingSpent to zero on success", async () => {
       const session = createMockSession({ pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 
-      expect(store.get("session-1")?.pendingSpent).toBe(0n);
+      expect((await store.get("session-1"))?.pendingSpent).toBe(0n);
     });
 
     it("sets status back to open after successful settlement", async () => {
       const session = createMockSession({ status: "open", pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 
-      expect(store.get("session-1")?.status).toBe("open");
+      expect((await store.get("session-1"))?.status).toBe("open");
     });
 
     it("records lastSettlement with reason and receipt", async () => {
       const session = createMockSession({ pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "idle_timeout");
 
-      const updated = store.get("session-1");
+      const updated = await store.get("session-1");
       expect(updated?.lastSettlement).toBeDefined();
       expect(updated?.lastSettlement?.reason).toBe("idle_timeout");
       expect(updated?.lastSettlement?.receipt.success).toBe(true);
@@ -160,20 +187,20 @@ describe("settleUptoSession", () => {
   describe("closeAfter behavior", () => {
     it("closes session after successful settlement when closeAfter is true", async () => {
       const session = createMockSession({ pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test", true);
 
-      expect(store.get("session-1")?.status).toBe("closed");
+      expect((await store.get("session-1"))?.status).toBe("closed");
     });
 
     it("keeps session open when closeAfter is false", async () => {
       const session = createMockSession({ pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test", false);
 
-      expect(store.get("session-1")?.status).toBe("open");
+      expect((await store.get("session-1"))?.status).toBe("open");
     });
   });
 
@@ -184,11 +211,11 @@ describe("settleUptoSession", () => {
         pendingSpent: 100n,
         settledTotal: 900n,
       });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 
-      expect(store.get("session-1")?.status).toBe("closed");
+      expect((await store.get("session-1"))?.status).toBe("closed");
     });
 
     it("closes session when settledTotal exceeds cap", async () => {
@@ -197,11 +224,11 @@ describe("settleUptoSession", () => {
         pendingSpent: 200n,
         settledTotal: 900n,
       });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 
-      expect(store.get("session-1")?.status).toBe("closed");
+      expect((await store.get("session-1"))?.status).toBe("closed");
     });
   });
 
@@ -212,7 +239,7 @@ describe("settleUptoSession", () => {
         deadline: BigInt(nowSec + 30), // 30 seconds from now
         pendingSpent: 100n,
       });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(
         store,
@@ -223,7 +250,7 @@ describe("settleUptoSession", () => {
         60
       );
 
-      expect(store.get("session-1")?.status).toBe("closed");
+      expect((await store.get("session-1"))?.status).toBe("closed");
     });
 
     it("keeps session open when deadline is beyond buffer", async () => {
@@ -232,7 +259,7 @@ describe("settleUptoSession", () => {
         deadline: BigInt(nowSec + 3600), // 1 hour from now
         pendingSpent: 100n,
       });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(
         store,
@@ -243,7 +270,7 @@ describe("settleUptoSession", () => {
         60
       );
 
-      expect(store.get("session-1")?.status).toBe("open");
+      expect((await store.get("session-1"))?.status).toBe("open");
     });
   });
 
@@ -258,47 +285,47 @@ describe("settleUptoSession", () => {
         pendingSpent: 100n,
         settledTotal: 200n,
       });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 
-      expect(store.get("session-1")?.settledTotal).toBe(200n);
+      expect((await store.get("session-1"))?.settledTotal).toBe(200n);
     });
 
     it("does not reset pendingSpent on failure", async () => {
       const session = createMockSession({ pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 
-      expect(store.get("session-1")?.pendingSpent).toBe(100n);
+      expect((await store.get("session-1"))?.pendingSpent).toBe(100n);
     });
 
     it("restores original status on failure without closeAfter", async () => {
       const session = createMockSession({ status: "open", pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test", false);
 
-      expect(store.get("session-1")?.status).toBe("open");
+      expect((await store.get("session-1"))?.status).toBe("open");
     });
 
     it("sets status to closed on failure with closeAfter", async () => {
       const session = createMockSession({ status: "open", pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test", true);
 
-      expect(store.get("session-1")?.status).toBe("closed");
+      expect((await store.get("session-1"))?.status).toBe("closed");
     });
 
     it("records lastSettlement with failure receipt", async () => {
       const session = createMockSession({ pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 
-      const updated = store.get("session-1");
+      const updated = await store.get("session-1");
       expect(updated?.lastSettlement?.receipt.success).toBe(false);
     });
   });
@@ -309,11 +336,11 @@ describe("settleUptoSession", () => {
       mockClient = { settle: settleMock };
 
       const session = createMockSession({ pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 
-      const updated = store.get("session-1");
+      const updated = await store.get("session-1");
       expect(updated?.lastSettlement?.receipt.success).toBe(false);
       expect(updated?.lastSettlement?.receipt.errorReason).toBe(
         "Network error"
@@ -325,11 +352,11 @@ describe("settleUptoSession", () => {
       mockClient = { settle: settleMock };
 
       const session = createMockSession({ pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 
-      const updated = store.get("session-1");
+      const updated = await store.get("session-1");
       expect(updated?.lastSettlement?.receipt.errorReason).toBe(
         "settlement_failed"
       );
@@ -340,13 +367,13 @@ describe("settleUptoSession", () => {
     it("sets status to settling before calling client", async () => {
       let statusDuringSettle: string | undefined;
       settleMock = mock(async () => {
-        statusDuringSettle = store.get("session-1")?.status;
+        statusDuringSettle = (await store.get("session-1"))?.status;
         return createSuccessResponse();
       });
       mockClient = { settle: settleMock };
 
       const session = createMockSession({ pendingSpent: 100n });
-      store.set("session-1", session);
+      await store.set("session-1", session);
 
       await settleUptoSession(store, mockClient, "session-1", "test");
 

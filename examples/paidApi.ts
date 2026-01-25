@@ -19,6 +19,7 @@ import { Elysia } from "elysia";
 import { node } from "@elysiajs/node";
 import { HTTPFacilitatorClient } from "@x402/core/http";
 import { createPaywall, evmPaywall, svmPaywall } from "@x402/paywall";
+import Redis from "ioredis";
 
 import { createElysiaPaidRoutes } from "@daydreamsai/facilitator/elysia";
 import {
@@ -26,7 +27,12 @@ import {
   createPrivateKeySvmSigner,
 } from "@daydreamsai/facilitator/signers";
 import { createResourceServer } from "@daydreamsai/facilitator/server";
-import { createUptoModule, formatSession } from "@daydreamsai/facilitator/upto";
+import {
+  createUptoModule,
+  createRedisSweeperLock,
+  RedisUptoSessionStore,
+  formatSession,
+} from "@daydreamsai/facilitator/upto";
 import { getRpcUrl } from "@daydreamsai/facilitator/config";
 
 // ============================================================================
@@ -37,6 +43,10 @@ const PORT = Number(4022);
 const FACILITATOR_URL =
   process.env.FACILITATOR_URL ??
   `http://localhost:${process.env.FACILITATOR_PORT ?? 8090}`;
+const REDIS_URL = process.env.REDIS_URL;
+const REDIS_PREFIX = process.env.REDIS_PREFIX ?? "facilitator:upto";
+const REDIS_SWEEPER_LOCK_KEY =
+  process.env.REDIS_SWEEPER_LOCK_KEY ?? `${REDIS_PREFIX}:sweeper:lock`;
 
 const evmRpcUrl = getRpcUrl("base") ?? "https://mainnet.base.org";
 const evmSigner = createPrivateKeyEvmSigner({
@@ -53,12 +63,22 @@ const [svmAddress] = svmSigner.getAddresses();
 
 const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
 
+const redis = REDIS_URL ? new Redis(REDIS_URL) : undefined;
+const sessionStore = redis
+  ? new RedisUptoSessionStore(redis, { keyPrefix: REDIS_PREFIX })
+  : undefined;
+const sweeperLock = redis
+  ? createRedisSweeperLock(redis, { key: REDIS_SWEEPER_LOCK_KEY })
+  : undefined;
+
 // Create upto module for session store + manual settlement
 const upto = createUptoModule({
+  ...(sessionStore ? { store: sessionStore } : {}),
   facilitatorClient,
   sweeperConfig: {
     intervalMs: 30_000,
     idleSettleMs: 2 * 60_000,
+    ...(sweeperLock ? { lock: sweeperLock } : {}),
   },
   autoSweeper: true,
 });
@@ -140,8 +160,8 @@ createElysiaPaidRoutes(app, {
   });
 
 app
-  .get("/upto-session/:id", ({ params }) => {
-    const session = upto.store.get(params.id);
+  .get("/upto-session/:id", async ({ params }) => {
+    const session = await upto.store.get(params.id);
     if (!session) return { error: "unknown_session" };
     return { id: params.id, ...formatSession(session) };
   })
@@ -152,7 +172,7 @@ app
       return { error: "missing_session_id" };
     }
 
-    const session = upto.store.get(sessionId);
+    const session = await upto.store.get(sessionId);
     if (!session) {
       set.status = 404;
       return { error: "unknown_session" };
@@ -160,7 +180,7 @@ app
 
     await upto.settleSession(sessionId, "manual_close", true);
 
-    const updated = upto.store.get(sessionId);
+    const updated = await upto.store.get(sessionId);
     return {
       success: updated?.lastSettlement?.receipt.success ?? true,
       ...formatSession(updated ?? session),

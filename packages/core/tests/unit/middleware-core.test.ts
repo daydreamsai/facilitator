@@ -19,6 +19,8 @@ const createMockUptoModule = (): UptoModule =>
     store: {
       get: mock(() => Promise.resolve(null)),
       set: mock(() => Promise.resolve()),
+      delete: mock(() => Promise.resolve()),
+      entries: mock(() => [][Symbol.iterator]()),
     },
     createSweeper: mock(() => ({})),
     settleSession: mock(() => Promise.resolve({ success: true })),

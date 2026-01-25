@@ -18,6 +18,7 @@
 import { Hono } from "hono";
 import { HTTPFacilitatorClient } from "@x402/core/http";
 import { createPaywall, evmPaywall, svmPaywall } from "@x402/paywall";
+import Redis from "ioredis";
 
 import { createHonoPaidRoutes } from "@daydreamsai/facilitator/hono";
 import {
@@ -25,7 +26,12 @@ import {
   createPrivateKeySvmSigner,
 } from "@daydreamsai/facilitator/signers";
 import { createResourceServer } from "@daydreamsai/facilitator/server";
-import { createUptoModule, formatSession } from "@daydreamsai/facilitator/upto";
+import {
+  createUptoModule,
+  createRedisSweeperLock,
+  RedisUptoSessionStore,
+  formatSession,
+} from "@daydreamsai/facilitator/upto";
 import { getRpcUrl } from "@daydreamsai/facilitator/config";
 
 // ============================================================================
@@ -36,6 +42,10 @@ const PORT = Number(4023);
 const FACILITATOR_URL =
   process.env.FACILITATOR_URL ??
   `http://localhost:${process.env.FACILITATOR_PORT ?? 8090}`;
+const REDIS_URL = process.env.REDIS_URL;
+const REDIS_PREFIX = process.env.REDIS_PREFIX ?? "facilitator:upto";
+const REDIS_SWEEPER_LOCK_KEY =
+  process.env.REDIS_SWEEPER_LOCK_KEY ?? `${REDIS_PREFIX}:sweeper:lock`;
 
 const evmRpcUrl = getRpcUrl("base") ?? "https://mainnet.base.org";
 const evmSigner = createPrivateKeyEvmSigner({
@@ -52,12 +62,22 @@ const [svmAddress] = svmSigner.getAddresses();
 
 const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
 
+const redis = REDIS_URL ? new Redis(REDIS_URL) : undefined;
+const sessionStore = redis
+  ? new RedisUptoSessionStore(redis, { keyPrefix: REDIS_PREFIX })
+  : undefined;
+const sweeperLock = redis
+  ? createRedisSweeperLock(redis, { key: REDIS_SWEEPER_LOCK_KEY })
+  : undefined;
+
 // Create upto module for session store + manual settlement
 const upto = createUptoModule({
+  ...(sessionStore ? { store: sessionStore } : {}),
   facilitatorClient,
   sweeperConfig: {
     intervalMs: 30_000,
     idleSettleMs: 2 * 60_000,
+    ...(sweeperLock ? { lock: sweeperLock } : {}),
   },
   autoSweeper: true,
 });
@@ -143,8 +163,8 @@ createHonoPaidRoutes(app, {
   );
 
 // Non-paid routes
-app.get("/upto-session/:id", (c) => {
-  const session = upto.store.get(c.req.param("id"));
+app.get("/upto-session/:id", async (c) => {
+  const session = await upto.store.get(c.req.param("id"));
   if (!session) return c.json({ error: "unknown_session" });
   return c.json({ id: c.req.param("id"), ...formatSession(session) });
 });
@@ -157,14 +177,14 @@ app.post("/upto-close", async (c) => {
     return c.json({ error: "missing_session_id" }, 400);
   }
 
-  const session = upto.store.get(sessionId);
+  const session = await upto.store.get(sessionId);
   if (!session) {
     return c.json({ error: "unknown_session" }, 404);
   }
 
   await upto.settleSession(sessionId, "manual_close", true);
 
-  const updated = upto.store.get(sessionId);
+  const updated = await upto.store.get(sessionId);
   return c.json({
     success: updated?.lastSettlement?.receipt.success ?? true,
     ...formatSession(updated ?? session),

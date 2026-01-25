@@ -225,7 +225,7 @@ export async function processBeforeHandle(
     }
 
     if (autoTrack) {
-      const tracking = trackUptoPayment(
+      const tracking = await trackUptoPayment(
         uptoModule.store,
         result.paymentPayload,
         result.paymentRequirements

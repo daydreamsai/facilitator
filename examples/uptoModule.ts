@@ -17,15 +17,21 @@
  * Environment variables:
  *   - PORT: Server port (default: 4023)
  *   - FACILITATOR_URL: Facilitator URL (default: http://localhost:8090)
+ *   - REDIS_URL: Redis connection URL (optional)
+ *   - REDIS_PREFIX: Redis key prefix (optional)
+ *   - REDIS_SWEEPER_LOCK_KEY: Redis lock key (optional)
  */
 
 import { Elysia } from "elysia";
 import { node } from "@elysiajs/node";
 import { HTTPFacilitatorClient } from "@x402/core/http";
 import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
+import Redis from "ioredis";
 
 import {
   createUptoModule,
+  createRedisSweeperLock,
+  RedisUptoSessionStore,
   trackUptoPayment,
   formatSession,
   TRACKING_ERROR_STATUS,
@@ -128,9 +134,21 @@ class CustomSessionStore implements UptoSessionStore {
 
 const PORT = Number(process.env.PORT ?? 4023);
 const FACILITATOR_URL = process.env.FACILITATOR_URL ?? "http://localhost:8090";
+const REDIS_URL = process.env.REDIS_URL;
+const REDIS_PREFIX = process.env.REDIS_PREFIX ?? "facilitator:upto";
+const REDIS_SWEEPER_LOCK_KEY =
+  process.env.REDIS_SWEEPER_LOCK_KEY ?? `${REDIS_PREFIX}:sweeper:lock`;
 
 // Create facilitator client
 const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
+
+const redis = REDIS_URL ? new Redis(REDIS_URL) : undefined;
+const redisStore = redis
+  ? new RedisUptoSessionStore(redis, { keyPrefix: REDIS_PREFIX })
+  : undefined;
+const sweeperLock = redis
+  ? createRedisSweeperLock(redis, { key: REDIS_SWEEPER_LOCK_KEY })
+  : undefined;
 
 // Create custom store with event hooks for logging
 const customStore = new CustomSessionStore({
@@ -146,15 +164,42 @@ const customStore = new CustomSessionStore({
   },
 });
 
-// Create upto module with the custom store
+const activeStore = redisStore ?? customStore;
+const storeLabel = redisStore ? "RedisUptoSessionStore" : "CustomSessionStore";
+
+const getStoreStats = async () => {
+  if (!redisStore) return customStore.getStats();
+  let open = 0;
+  let settling = 0;
+  let closed = 0;
+  let total = 0;
+  for await (const [, session] of activeStore.entries()) {
+    total++;
+    switch (session.status) {
+      case "open":
+        open++;
+        break;
+      case "settling":
+        settling++;
+        break;
+      case "closed":
+        closed++;
+        break;
+    }
+  }
+  return { total, open, settling, closed };
+};
+
+// Create upto module with the active store
 const upto = createUptoModule({
-  store: customStore,
+  store: activeStore,
   facilitatorClient,
   sweeperConfig: {
     intervalMs: 15_000, // Sweep every 15 seconds (faster for demo)
     idleSettleMs: 60_000, // Settle after 1 minute idle
     capThresholdNum: 8n, // Settle at 80% cap (8/10)
     capThresholdDen: 10n,
+    ...(sweeperLock ? { lock: sweeperLock } : {}),
   },
 });
 
@@ -191,7 +236,11 @@ const app = new Elysia({ adapter: node() })
       return { error: "not_upto_scheme" };
     }
 
-    const result = trackUptoPayment(upto.store, paymentPayload, paymentRequirements);
+    const result = await trackUptoPayment(
+      upto.store,
+      paymentPayload,
+      paymentRequirements
+    );
 
     if (!result.success) {
       set.status = TRACKING_ERROR_STATUS[result.error];
@@ -214,8 +263,8 @@ const app = new Elysia({ adapter: node() })
    * GET /session/:id
    * Get session details.
    */
-  .get("/session/:id", ({ params, set }) => {
-    const session = upto.store.get(params.id);
+  .get("/session/:id", async ({ params, set }) => {
+    const session = await upto.store.get(params.id);
 
     if (!session) {
       set.status = 404;
@@ -235,7 +284,7 @@ const app = new Elysia({ adapter: node() })
    */
   .post("/session/:id/settle", async ({ params, body, set }) => {
     const { close } = (body as { close?: boolean }) ?? {};
-    const session = upto.store.get(params.id);
+    const session = await upto.store.get(params.id);
 
     if (!session) {
       set.status = 404;
@@ -250,7 +299,7 @@ const app = new Elysia({ adapter: node() })
     if (session.pendingSpent === 0n) {
       if (close) {
         session.status = "closed";
-        upto.store.set(params.id, session);
+        await upto.store.set(params.id, session);
         return { success: true, message: "session_closed_no_pending" };
       }
       return { success: true, message: "nothing_to_settle" };
@@ -258,7 +307,7 @@ const app = new Elysia({ adapter: node() })
 
     await upto.settleSession(params.id, "manual_settlement", close ?? false);
 
-    const updated = upto.store.get(params.id);
+    const updated = await upto.store.get(params.id);
     return {
       success: updated?.lastSettlement?.receipt.success ?? false,
       settlement: updated?.lastSettlement,
@@ -270,7 +319,7 @@ const app = new Elysia({ adapter: node() })
    * Close a session and settle any remaining balance.
    */
   .post("/session/:id/close", async ({ params, set }) => {
-    const session = upto.store.get(params.id);
+    const session = await upto.store.get(params.id);
 
     if (!session) {
       set.status = 404;
@@ -279,7 +328,7 @@ const app = new Elysia({ adapter: node() })
 
     await upto.settleSession(params.id, "manual_close", true);
 
-    const updated = upto.store.get(params.id);
+    const updated = await upto.store.get(params.id);
     return {
       success: true,
       finalStatus: updated?.status,
@@ -291,7 +340,7 @@ const app = new Elysia({ adapter: node() })
    * GET /sessions
    * List all active sessions (for debugging/monitoring).
    */
-  .get("/sessions", () => {
+  .get("/sessions", async () => {
     const sessions: Array<{
       id: string;
       status: string;
@@ -300,7 +349,7 @@ const app = new Elysia({ adapter: node() })
       settledTotal: string;
     }> = [];
 
-    for (const [id, session] of upto.store.entries()) {
+    for await (const [id, session] of upto.store.entries()) {
       sessions.push({
         id,
         status: session.status,
@@ -312,7 +361,7 @@ const app = new Elysia({ adapter: node() })
 
     return {
       count: sessions.length,
-      stats: customStore.getStats(),
+      stats: await getStoreStats(),
       sessions,
     };
   })
@@ -321,12 +370,12 @@ const app = new Elysia({ adapter: node() })
    * GET /health
    * Health check with store stats.
    */
-  .get("/health", () => ({
+  .get("/health", async () => ({
     status: "ok",
     facilitator: FACILITATOR_URL,
     store: {
-      type: "CustomSessionStore",
-      stats: customStore.getStats(),
+      type: storeLabel,
+      stats: await getStoreStats(),
     },
     sweeper: {
       intervalMs: 15_000,

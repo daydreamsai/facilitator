@@ -20,7 +20,11 @@
  * app.use(upto.createSweeper());
  *
  * // Track payments
- * const result = trackUptoPayment(upto.store, paymentPayload, requirements);
+ * const result = await trackUptoPayment(
+ *   upto.store,
+ *   paymentPayload,
+ *   requirements
+ * );
  * if (result.success) {
  *   console.log(`Tracked payment in session ${result.sessionId}`);
  * }
@@ -41,6 +45,15 @@ export {
   type UptoSession,
   type UptoSessionStatus,
 } from "./store.js";
+
+// Redis session store + sweeper lock
+export {
+  RedisUptoSessionStore,
+  createRedisSweeperLock,
+  type RedisClientLike,
+  type RedisUptoSessionStoreOptions,
+  type RedisSweeperLockOptions,
+} from "./redis-store.js";
 
 // Session ID generation
 export {
@@ -63,4 +76,8 @@ export {
 export { settleUptoSession, type UptoFacilitatorClient } from "./settlement.js";
 
 // Sweeper (Elysia plugin for auto-settlement)
-export { createUptoSweeper, type UptoSweeperConfig } from "./sweeper.js";
+export {
+  createUptoSweeper,
+  type UptoSweeperConfig,
+  type UptoSweeperLock,
+} from "./sweeper.js";

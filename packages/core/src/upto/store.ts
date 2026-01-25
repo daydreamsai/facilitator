@@ -12,6 +12,7 @@ export type UptoSession = {
   pendingSpent: bigint;
   settledTotal: bigint;
   lastActivityMs: number;
+  settlingSinceMs?: number;
   status: UptoSessionStatus;
   paymentPayload: PaymentPayload;
   paymentRequirements: PaymentRequirements;
@@ -22,11 +23,17 @@ export type UptoSession = {
   };
 };
 
+export type MaybePromise<T> = T | Promise<T>;
+
+export type UptoSessionEntries =
+  | IterableIterator<[string, UptoSession]>
+  | AsyncIterableIterator<[string, UptoSession]>;
+
 export interface UptoSessionStore {
-  get(id: string): UptoSession | undefined;
-  set(id: string, session: UptoSession): void;
-  delete(id: string): void;
-  entries(): IterableIterator<[string, UptoSession]>;
+  get(id: string): MaybePromise<UptoSession | undefined>;
+  set(id: string, session: UptoSession): MaybePromise<void>;
+  delete(id: string): MaybePromise<void>;
+  entries(): UptoSessionEntries;
 }
 
 export class InMemoryUptoSessionStore implements UptoSessionStore {
@@ -48,4 +55,3 @@ export class InMemoryUptoSessionStore implements UptoSessionStore {
     return this.map.entries();
   }
 }
-

@@ -64,11 +64,11 @@ describe("tracking", () => {
       store = new InMemoryUptoSessionStore();
     });
 
-    it("creates new session for first payment", () => {
+    it("creates new session for first payment", async () => {
       const payload = createValidPayload();
       const requirements = createValidRequirements();
 
-      const result = trackUptoPayment(store, payload, requirements);
+      const result = await trackUptoPayment(store, payload, requirements);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -79,15 +79,15 @@ describe("tracking", () => {
       }
     });
 
-    it("accumulates pending spend for existing session", () => {
+    it("accumulates pending spend for existing session", async () => {
       const payload = createValidPayload();
       const requirements = createValidRequirements();
 
       // First payment
-      trackUptoPayment(store, payload, requirements);
+      await trackUptoPayment(store, payload, requirements);
 
       // Second payment
-      const result = trackUptoPayment(store, payload, requirements);
+      const result = await trackUptoPayment(store, payload, requirements);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -95,11 +95,11 @@ describe("tracking", () => {
       }
     });
 
-    it("returns error for invalid payload", () => {
+    it("returns error for invalid payload", async () => {
       const payload = { accepted: { scheme: "upto" } } as PaymentPayload;
       const requirements = createValidRequirements();
 
-      const result = trackUptoPayment(store, payload, requirements);
+      const result = await trackUptoPayment(store, payload, requirements);
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -107,19 +107,19 @@ describe("tracking", () => {
       }
     });
 
-    it("returns error when session is settling", () => {
+    it("returns error when session is settling", async () => {
       const payload = createValidPayload();
       const requirements = createValidRequirements();
 
       // Create session and set to settling
-      const firstResult = trackUptoPayment(store, payload, requirements);
+      const firstResult = await trackUptoPayment(store, payload, requirements);
       if (firstResult.success) {
         firstResult.session.status = "settling";
-        store.set(firstResult.sessionId, firstResult.session);
+        await store.set(firstResult.sessionId, firstResult.session);
       }
 
       // Try to track another payment
-      const result = trackUptoPayment(store, payload, requirements);
+      const result = await trackUptoPayment(store, payload, requirements);
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -128,19 +128,19 @@ describe("tracking", () => {
       }
     });
 
-    it("returns error when session is closed", () => {
+    it("returns error when session is closed", async () => {
       const payload = createValidPayload();
       const requirements = createValidRequirements();
 
       // Create session and close it
-      const firstResult = trackUptoPayment(store, payload, requirements);
+      const firstResult = await trackUptoPayment(store, payload, requirements);
       if (firstResult.success) {
         firstResult.session.status = "closed";
-        store.set(firstResult.sessionId, firstResult.session);
+        await store.set(firstResult.sessionId, firstResult.session);
       }
 
       // Try to track another payment
-      const result = trackUptoPayment(store, payload, requirements);
+      const result = await trackUptoPayment(store, payload, requirements);
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -148,16 +148,16 @@ describe("tracking", () => {
       }
     });
 
-    it("returns error when cap would be exceeded", () => {
+    it("returns error when cap would be exceeded", async () => {
       const payload = createValidPayload();
       const requirements = createValidRequirements();
       requirements.amount = "600000"; // 60% of cap
 
       // First payment (60%)
-      trackUptoPayment(store, payload, requirements);
+      await trackUptoPayment(store, payload, requirements);
 
       // Second payment would exceed cap (60% + 60% = 120%)
-      const result = trackUptoPayment(store, payload, requirements);
+      const result = await trackUptoPayment(store, payload, requirements);
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -165,23 +165,23 @@ describe("tracking", () => {
       }
     });
 
-    it("considers settled total when checking cap", () => {
+    it("considers settled total when checking cap", async () => {
       const payload = createValidPayload();
       const requirements = createValidRequirements();
       requirements.amount = "400000"; // 40% of cap
 
       // Create session with some already settled
-      const firstResult = trackUptoPayment(store, payload, requirements);
+      const firstResult = await trackUptoPayment(store, payload, requirements);
       if (firstResult.success) {
         firstResult.session.settledTotal = 500000n; // 50% already settled
         firstResult.session.pendingSpent = 0n;
-        store.set(firstResult.sessionId, firstResult.session);
+        await store.set(firstResult.sessionId, firstResult.session);
       }
 
       // Try another 40% - should fail (50% settled + 40% new = 90%, but cap check is >=)
       // Actually 50% + 40% = 90% which is under cap, let's make it exceed
       requirements.amount = "600000"; // 60% - now 50% + 60% = 110% > cap
-      const result = trackUptoPayment(store, payload, requirements);
+      const result = await trackUptoPayment(store, payload, requirements);
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -189,12 +189,12 @@ describe("tracking", () => {
       }
     });
 
-    it("updates lastActivityMs on each payment", () => {
+    it("updates lastActivityMs on each payment", async () => {
       const payload = createValidPayload();
       const requirements = createValidRequirements();
 
       const before = Date.now();
-      const result = trackUptoPayment(store, payload, requirements);
+      const result = await trackUptoPayment(store, payload, requirements);
       const after = Date.now();
 
       expect(result.success).toBe(true);
@@ -204,15 +204,15 @@ describe("tracking", () => {
       }
     });
 
-    it("stores session in the store", () => {
+    it("stores session in the store", async () => {
       const payload = createValidPayload();
       const requirements = createValidRequirements();
 
-      const result = trackUptoPayment(store, payload, requirements);
+      const result = await trackUptoPayment(store, payload, requirements);
 
       expect(result.success).toBe(true);
       if (result.success) {
-        const stored = store.get(result.sessionId);
+        const stored = await store.get(result.sessionId);
         expect(stored).toBeDefined();
         expect(stored?.pendingSpent).toBe(100000n);
       }

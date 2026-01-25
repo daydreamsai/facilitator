@@ -18,6 +18,7 @@
 import express from "express";
 import { HTTPFacilitatorClient } from "@x402/core/http";
 import { createPaywall, evmPaywall, svmPaywall } from "@x402/paywall";
+import Redis from "ioredis";
 
 import { createExpressPaidRoutes } from "@daydreamsai/facilitator/express";
 import {
@@ -25,7 +26,12 @@ import {
   createPrivateKeySvmSigner,
 } from "@daydreamsai/facilitator/signers";
 import { createResourceServer } from "@daydreamsai/facilitator/server";
-import { createUptoModule, formatSession } from "@daydreamsai/facilitator/upto";
+import {
+  createUptoModule,
+  createRedisSweeperLock,
+  RedisUptoSessionStore,
+  formatSession,
+} from "@daydreamsai/facilitator/upto";
 import { getRpcUrl } from "@daydreamsai/facilitator/config";
 
 // ============================================================================
@@ -36,6 +42,10 @@ const PORT = Number(4024);
 const FACILITATOR_URL =
   process.env.FACILITATOR_URL ??
   `http://localhost:${process.env.FACILITATOR_PORT ?? 8090}`;
+const REDIS_URL = process.env.REDIS_URL;
+const REDIS_PREFIX = process.env.REDIS_PREFIX ?? "facilitator:upto";
+const REDIS_SWEEPER_LOCK_KEY =
+  process.env.REDIS_SWEEPER_LOCK_KEY ?? `${REDIS_PREFIX}:sweeper:lock`;
 
 const evmRpcUrl = getRpcUrl("base") ?? "https://mainnet.base.org";
 const evmSigner = createPrivateKeyEvmSigner({
@@ -52,12 +62,22 @@ const [svmAddress] = svmSigner.getAddresses();
 
 const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
 
+const redis = REDIS_URL ? new Redis(REDIS_URL) : undefined;
+const sessionStore = redis
+  ? new RedisUptoSessionStore(redis, { keyPrefix: REDIS_PREFIX })
+  : undefined;
+const sweeperLock = redis
+  ? createRedisSweeperLock(redis, { key: REDIS_SWEEPER_LOCK_KEY })
+  : undefined;
+
 // Create upto module for session store + manual settlement
 const upto = createUptoModule({
+  ...(sessionStore ? { store: sessionStore } : {}),
   facilitatorClient,
   sweeperConfig: {
     intervalMs: 30_000,
     idleSettleMs: 2 * 60_000,
+    ...(sweeperLock ? { lock: sweeperLock } : {}),
   },
   autoSweeper: true,
 });
@@ -148,8 +168,8 @@ createExpressPaidRoutes(app, {
   );
 
 // Non-paid routes
-app.get("/api/upto-session/:id", (req, res) => {
-  const session = upto.store.get(req.params.id);
+app.get("/api/upto-session/:id", async (req, res) => {
+  const session = await upto.store.get(req.params.id);
   if (!session) {
     res.json({ error: "unknown_session" });
     return;
@@ -165,7 +185,7 @@ app.post("/api/upto-close", async (req, res) => {
     return;
   }
 
-  const session = upto.store.get(sessionId);
+  const session = await upto.store.get(sessionId);
   if (!session) {
     res.status(404).json({ error: "unknown_session" });
     return;
@@ -173,7 +193,7 @@ app.post("/api/upto-close", async (req, res) => {
 
   await upto.settleSession(sessionId, "manual_close", true);
 
-  const updated = upto.store.get(sessionId);
+  const updated = await upto.store.get(sessionId);
   res.json({
     success: updated?.lastSettlement?.receipt.success ?? true,
     ...formatSession(updated ?? session),
