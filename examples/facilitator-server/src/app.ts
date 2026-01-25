@@ -19,6 +19,19 @@ const facilitator = createFacilitator({
   ...defaultSigners,
 });
 
+function normalizeSupportedVersions(supported: {
+  kinds: Array<{ x402Version: number; network: string }>;
+  extensions: unknown[];
+  signers: Record<string, string[]>;
+}) {
+  for (const kind of supported.kinds) {
+    if (!kind.network.includes(":")) {
+      kind.x402Version = 1;
+    }
+  }
+  return supported;
+}
+
 // Elysia app (Node adapter for Node.js runtime)
 export const app = new Elysia({ adapter: node() })
   .use(
@@ -130,7 +143,7 @@ export const app = new Elysia({ adapter: node() })
    */
   .get("/supported", ({ status }) => {
     try {
-      return facilitator.getSupported();
+      return normalizeSupportedVersions(facilitator.getSupported());
     } catch (error) {
       console.error("Supported error:", error);
       return status(500, {
