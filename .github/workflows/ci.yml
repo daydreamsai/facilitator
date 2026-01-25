@@ -82,7 +82,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: examples/facilitator-server/Dockerfile
+          file: Dockerfile
           push: false
           load: true
           tags: facilitator:test
