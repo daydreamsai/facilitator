@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "examples/facilitator-server/Dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "bun run start"

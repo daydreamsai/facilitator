@@ -4,7 +4,7 @@ services:
   facilitator:
     build:
       context: ../..
-      dockerfile: examples/facilitator-server/Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "8090:8090"
     environment:

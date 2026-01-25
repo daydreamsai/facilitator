@@ -43,7 +43,7 @@ describe.skipIf(!runDockerTests)("Docker Build", () => {
     // Build the image from repo root
     console.log("Building Docker image...");
     try {
-      const result = await $`docker build -t ${imageName} -f examples/facilitator-server/Dockerfile .`
+      const result = await $`docker build -t ${imageName} -f Dockerfile .`
         .cwd(REPO_ROOT)
         .quiet();
       buildSucceeded = result.exitCode === 0;
