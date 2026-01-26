@@ -96,9 +96,7 @@ export async function settleUptoSession(
     session.status = closeAfter ? "closed" : initialStatus;
   }
 
-  if (session.status !== "settling") {
-    session.settlingSinceMs = undefined;
-  }
+  session.settlingSinceMs = undefined;
 
   await store.set(sessionId, session);
 }
