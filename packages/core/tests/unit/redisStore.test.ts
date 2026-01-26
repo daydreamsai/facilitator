@@ -96,6 +96,17 @@ class FakeRedis {
     return this.strings.get(key) ?? null;
   }
 
+  async eval(_script: string, keys: string[], args: string[]) {
+    const key = keys[0];
+    const token = args[0];
+    if (this.isExpired(key)) return 0;
+    const current = this.strings.get(key);
+    if (current !== token) return 0;
+    this.strings.delete(key);
+    this.expiries.delete(key);
+    return 1;
+  }
+
   getExpiry(key: string) {
     return this.expiries.get(key);
   }

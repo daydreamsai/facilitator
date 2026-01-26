@@ -172,6 +172,7 @@ export type RedisSweeperLockOptions = {
   ttlMs?: number;
   token?: string;
   useOptionsStyle?: boolean;
+  allowUnsafeRelease?: boolean;
 };
 
 export function createRedisSweeperLock(
@@ -182,6 +183,13 @@ export function createRedisSweeperLock(
   const ttlMs = options.ttlMs ?? 60_000;
   const token = options.token ?? crypto.randomUUID();
   const useOptionsStyle = options.useOptionsStyle ?? true;
+  const allowUnsafeRelease = options.allowUnsafeRelease ?? false;
+
+  if (!redis.eval && !allowUnsafeRelease) {
+    throw new Error(
+      "Redis client missing eval for safe sweeper lock release. Set allowUnsafeRelease to true to use a non-atomic fallback."
+    );
+  }
 
   return {
     async acquire() {
@@ -204,6 +212,11 @@ export function createRedisSweeperLock(
         return;
       }
 
+      if (!allowUnsafeRelease) {
+        throw new Error(
+          "Redis client missing eval for safe sweeper lock release. Set allowUnsafeRelease to true to use a non-atomic fallback."
+        );
+      }
       if (!redis.get) {
         throw new Error("Redis client missing get for sweeper lock release.");
       }
