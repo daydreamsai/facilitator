@@ -147,7 +147,10 @@ const redisStore = redis
   ? new RedisUptoSessionStore(redis, { keyPrefix: REDIS_PREFIX })
   : undefined;
 const sweeperLock = redis
-  ? createRedisSweeperLock(redis, { key: REDIS_SWEEPER_LOCK_KEY })
+  ? createRedisSweeperLock(redis, {
+      key: REDIS_SWEEPER_LOCK_KEY,
+      useOptionsStyle: false,
+    })
   : undefined;
 
 // Create custom store with event hooks for logging

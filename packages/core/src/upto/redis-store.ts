@@ -171,6 +171,7 @@ export type RedisSweeperLockOptions = {
   key?: string;
   ttlMs?: number;
   token?: string;
+  useOptionsStyle?: boolean;
 };
 
 export function createRedisSweeperLock(
@@ -180,6 +181,7 @@ export function createRedisSweeperLock(
   const key = options.key ?? "upto:sweeper:lock";
   const ttlMs = options.ttlMs ?? 60_000;
   const token = options.token ?? crypto.randomUUID();
+  const useOptionsStyle = options.useOptionsStyle ?? true;
 
   return {
     async acquire() {
@@ -187,10 +189,9 @@ export function createRedisSweeperLock(
         throw new Error("Redis client missing set for sweeper lock.");
       }
 
-      const result =
-        redis.set.length >= 3
-          ? await redis.set(key, token, { NX: true, PX: ttlMs })
-          : await redis.set(key, token, "PX", ttlMs, "NX");
+      const result = useOptionsStyle
+        ? await redis.set(key, token, { NX: true, PX: ttlMs })
+        : await redis.set(key, token, "PX", ttlMs, "NX");
       return result === "OK";
     },
     async release() {
