@@ -65,6 +65,56 @@ class FakeRedis {
     return Array.from(this.sets.get(key) ?? []);
   }
 
+  private allKeys() {
+    return Array.from(
+      new Set([
+        ...this.hashes.keys(),
+        ...this.strings.keys(),
+        ...this.sets.keys(),
+      ])
+    );
+  }
+
+  private matchPattern(key: string, pattern: string) {
+    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(
+      `^${escaped.replace(/\*/g, ".*").replace(/\?/g, ".")}$`
+    );
+    return regex.test(key);
+  }
+
+  async scan(cursor: string, ...args: string[]) {
+    let matchPattern: string | undefined;
+    let count = 10;
+
+    for (let i = 0; i < args.length; i += 1) {
+      const token = args[i];
+      if (token === "MATCH" && args[i + 1]) {
+        matchPattern = args[i + 1];
+        i += 1;
+        continue;
+      }
+      if (token === "COUNT" && args[i + 1]) {
+        const parsed = Number(args[i + 1]);
+        count = Number.isFinite(parsed) && parsed > 0 ? parsed : count;
+        i += 1;
+      }
+    }
+
+    const keys = this.allKeys().filter((key) => {
+      if (this.isExpired(key)) return false;
+      if (!matchPattern) return true;
+      return this.matchPattern(key, matchPattern);
+    });
+    keys.sort();
+
+    const start = Number(cursor);
+    const slice = keys.slice(start, start + count);
+    const next = start + slice.length;
+    const nextCursor = next >= keys.length ? "0" : String(next);
+    return [nextCursor, slice] as [string, string[]];
+  }
+
   async pexpire(key: string, ttlMs: number) {
     this.expiries.set(key, this.nowMs() + ttlMs);
     return 1;
@@ -176,6 +226,26 @@ describe("RedisUptoSessionStore", () => {
 
     const entries: Array<[string, UptoSession]> = [];
     for await (const entry of store.entries()) {
+      entries.push(entry);
+    }
+
+    expect(entries).toHaveLength(2);
+    const ids = entries.map(([id]) => id);
+    expect(ids).toContain("session-1");
+    expect(ids).toContain("session-2");
+  });
+
+  it("iterates entries via scan when unindexed", async () => {
+    const unindexed = new RedisUptoSessionStore(redis, {
+      keyPrefix: "test:upto",
+      useIndexSet: false,
+    });
+
+    await unindexed.set("session-1", createMockSession({ cap: 100n }));
+    await unindexed.set("session-2", createMockSession({ cap: 200n }));
+
+    const entries: Array<[string, UptoSession]> = [];
+    for await (const entry of unindexed.entries()) {
       entries.push(entry);
     }
 
