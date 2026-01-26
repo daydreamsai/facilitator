@@ -51,11 +51,18 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
   const settlingTimeoutMs = config.settlingTimeoutMs ?? 5 * 60 * 1000;
 
   let interval: NodeJS.Timeout | undefined;
+  let isSweepRunning = false;
 
   const sweep = async () => {
+    if (isSweepRunning) return;
+    isSweepRunning = true;
+
     if (config.lock) {
       const acquired = await config.lock.acquire();
-      if (!acquired) return;
+      if (!acquired) {
+        isSweepRunning = false;
+        return;
+      }
     }
 
     try {
@@ -153,6 +160,7 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
       }
     } finally {
       if (config.lock) await config.lock.release();
+      isSweepRunning = false;
     }
   };
 
