@@ -56,16 +56,16 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
   const sweep = async () => {
     if (isSweepRunning) return;
     isSweepRunning = true;
-
-    if (config.lock) {
-      const acquired = await config.lock.acquire();
-      if (!acquired) {
-        isSweepRunning = false;
-        return;
-      }
-    }
+    let lockAcquired = false;
+    let sweepError: unknown;
 
     try {
+      if (config.lock) {
+        const acquired = await config.lock.acquire();
+        if (!acquired) return;
+        lockAcquired = true;
+      }
+
       const nowMs = Date.now();
       const nowSec = BigInt(Math.floor(nowMs / 1000));
 
@@ -158,9 +158,25 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
           }
         }
       }
+    } catch (error) {
+      sweepError = error;
     } finally {
-      if (config.lock) await config.lock.release();
+      let releaseError: unknown;
+      if (config.lock && lockAcquired) {
+        try {
+          await config.lock.release();
+        } catch (error) {
+          releaseError = error;
+        }
+      }
       isSweepRunning = false;
+      if (!sweepError && releaseError) {
+        throw releaseError;
+      }
+    }
+
+    if (sweepError) {
+      throw sweepError;
     }
   };
 
