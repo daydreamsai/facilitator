@@ -58,6 +58,7 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
     isSweepRunning = true;
     let lockAcquired = false;
     let sweepError: unknown;
+    let releaseError: unknown;
 
     try {
       if (config.lock) {
@@ -161,7 +162,6 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
     } catch (error) {
       sweepError = error;
     } finally {
-      let releaseError: unknown;
       if (config.lock && lockAcquired) {
         try {
           await config.lock.release();
@@ -170,19 +170,23 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
         }
       }
       isSweepRunning = false;
-      if (!sweepError && releaseError) {
-        throw releaseError;
-      }
     }
 
     if (sweepError) {
       throw sweepError;
     }
+    if (releaseError) {
+      throw releaseError;
+    }
   };
 
   return new Elysia({ name: "upto.sweeper" })
     .onStart(() => {
-      interval = setInterval(() => void sweep(), intervalMs);
+      interval = setInterval(() => {
+        sweep().catch((error) => {
+          console.error("Upto sweeper error:", error);
+        });
+      }, intervalMs);
     })
     .onStop(() => {
       if (interval) clearInterval(interval);
