@@ -53,6 +53,47 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
   let interval: NodeJS.Timeout | undefined;
   let isSweepRunning = false;
 
+  const safeSettleUptoSession = (
+    id: string,
+    reason: string,
+    closeAfter: boolean
+  ) => {
+    void settleUptoSession(
+      config.store,
+      config.facilitatorClient,
+      id,
+      reason,
+      closeAfter,
+      deadlineBufferSec,
+      settlingTimeoutMs
+    ).catch(async (error) => {
+      console.error("Upto sweeper settlement error:", { id, reason, error });
+      try {
+        const session = await config.store.get(id);
+        if (!session) return;
+        session.lastSettlement = {
+          atMs: Date.now(),
+          reason,
+          receipt: {
+            success: false,
+            errorReason:
+              error instanceof Error ? error.message : "settlement_failed",
+            transaction: "",
+            network: session.paymentPayload.accepted.network,
+            payer: undefined,
+          },
+        };
+        await config.store.set(id, session);
+      } catch (storeError) {
+        console.error("Upto sweeper failed to record settlement error:", {
+          id,
+          reason,
+          error: storeError,
+        });
+      }
+    });
+  };
+
   const sweep = async () => {
     if (isSweepRunning) return;
     isSweepRunning = true;
@@ -76,15 +117,7 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
           const isStale = nowMs - settlingSinceMs >= settlingTimeoutMs;
           if (!isStale) continue;
 
-          void settleUptoSession(
-            config.store,
-            config.facilitatorClient,
-            id,
-            "settling_timeout",
-            false,
-            deadlineBufferSec,
-            settlingTimeoutMs
-          );
+          safeSettleUptoSession(id, "settling_timeout", false);
           continue;
         }
 
@@ -94,28 +127,12 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
 
         if (session.status === "open" && session.pendingSpent > 0n) {
           if (idleMs >= idleSettleMs) {
-            void settleUptoSession(
-              config.store,
-              config.facilitatorClient,
-              id,
-              "idle_timeout",
-              false,
-              deadlineBufferSec,
-              settlingTimeoutMs
-            );
+            safeSettleUptoSession(id, "idle_timeout", false);
             continue;
           }
 
           if (timeToDeadline <= BigInt(deadlineBufferSec)) {
-            void settleUptoSession(
-              config.store,
-              config.facilitatorClient,
-              id,
-              "deadline_buffer",
-              true,
-              deadlineBufferSec,
-              settlingTimeoutMs
-            );
+            safeSettleUptoSession(id, "deadline_buffer", true);
             continue;
           }
 
@@ -123,15 +140,7 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
             totalOutstanding * capThresholdDen >=
             session.cap * capThresholdNum
           ) {
-            void settleUptoSession(
-              config.store,
-              config.facilitatorClient,
-              id,
-              "cap_threshold",
-              false,
-              deadlineBufferSec,
-              settlingTimeoutMs
-            );
+            safeSettleUptoSession(id, "cap_threshold", false);
             continue;
           }
         }
@@ -142,15 +151,7 @@ export function createUptoSweeper(config: UptoSweeperConfig) {
           session.settledTotal >= session.cap
         ) {
           if (session.pendingSpent > 0n && session.status === "open") {
-            void settleUptoSession(
-              config.store,
-              config.facilitatorClient,
-              id,
-              "auto_close",
-              true,
-              deadlineBufferSec,
-              settlingTimeoutMs
-            );
+            safeSettleUptoSession(id, "auto_close", true);
           } else {
             session.status = "closed";
             session.settlingSinceMs = undefined;
