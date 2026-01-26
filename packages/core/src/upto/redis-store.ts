@@ -19,11 +19,20 @@ export type RedisClientLike = {
   ) => Promise<[string, string[]]> | [string, string[]];
   pexpire?: (key: string, ttlMs: number) => Promise<number> | number;
   persist?: (key: string) => Promise<number> | number;
-  set?: (
-    key: string,
-    value: string,
-    options?: RedisSetOptions
-  ) => Promise<string | null> | string | null;
+  set?: {
+    (
+      key: string,
+      value: string,
+      options?: RedisSetOptions
+    ): Promise<string | null> | string | null;
+    (
+      key: string,
+      value: string,
+      flag: string,
+      flagValue: number,
+      extraFlag?: string
+    ): Promise<string | null> | string | null;
+  };
   get?: (key: string) => Promise<string | null> | string | null;
   eval?: (
     script: string,
@@ -178,7 +187,10 @@ export function createRedisSweeperLock(
         throw new Error("Redis client missing set for sweeper lock.");
       }
 
-      const result = await redis.set(key, token, { NX: true, PX: ttlMs });
+      const result =
+        redis.set.length >= 3
+          ? await redis.set(key, token, { NX: true, PX: ttlMs })
+          : await redis.set(key, token, "PX", ttlMs, "NX");
       return result === "OK";
     },
     async release() {
