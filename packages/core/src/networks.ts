@@ -238,7 +238,31 @@ export const SVM_NETWORKS = {
  * Check if a network supports v1 scheme (from @x402/evm)
  */
 export function supportsV1(network: string): boolean {
-  return V1_NETWORKS.includes(network);
+  if (V1_NETWORKS.includes(network)) return true;
+
+  const direct = getNetwork(network);
+  if (direct) {
+    return (
+      V1_NETWORKS.includes(direct.caip) ||
+      V1_NETWORKS.includes(String(direct.chainId))
+    );
+  }
+
+  // Handle CAIP or chainId input by mapping back to a known network name.
+  const entries = Object.entries(EVM_NETWORKS) as Array<
+    [string, EvmNetworkConfig]
+  >;
+  for (const [name, config] of entries) {
+    if (config.caip === network || String(config.chainId) === network) {
+      return (
+        V1_NETWORKS.includes(name) ||
+        V1_NETWORKS.includes(config.caip) ||
+        V1_NETWORKS.includes(String(config.chainId))
+      );
+    }
+  }
+
+  return false;
 }
 
 /**
