@@ -153,6 +153,33 @@ describe("createFacilitator", () => {
       expect(facilitator).toBeDefined();
     });
 
+    it("registers V1 kinds under x402Version=1 (not 2)", () => {
+      const signer = createMockEvmSigner();
+      const facilitator = createFacilitator({
+        evmSigners: [
+          {
+            signer,
+            networks: "eip155:8453",
+            v1NetworkNames: "base",
+          },
+        ],
+      });
+
+      const kinds = facilitator.getSupported().kinds;
+      const exactBase = kinds.filter(
+        (k) => k.scheme === "exact" && String(k.network) === "base"
+      );
+
+      expect(exactBase.length).toBe(1);
+      expect(exactBase[0]?.x402Version).toBe(1);
+
+      const exactCaip = kinds.filter(
+        (k) => k.scheme === "exact" && k.network === "eip155:8453"
+      );
+      expect(exactCaip.length).toBe(1);
+      expect(exactCaip[0]?.x402Version).toBe(2);
+    });
+
     it("does not register V1 when registerV1 is false", () => {
       const signer = createMockEvmSigner();
       const facilitator = createFacilitator({

@@ -27,6 +27,8 @@ export type { StarknetConfig };
 
 /** CAIP-2 network identifier (e.g., "eip155:8453", "solana:...") */
 export type NetworkId = `${string}:${string}`;
+/** Legacy/V1 EVM network identifier (e.g., "base", "base-sepolia") */
+export type V1NetworkName = string;
 
 export interface EvmSignerConfig {
   /** The EVM signer instance (use toFacilitatorEvmSigner to create one) */
@@ -47,7 +49,7 @@ export interface EvmSignerConfig {
    * Network name(s) for v1 registration (e.g., "base", "base-sepolia").
    * Required when registerV1 is true to map CAIP IDs to v1 network names.
    */
-  v1NetworkNames?: string | string[];
+  v1NetworkNames?: V1NetworkName | V1NetworkName[];
 }
 
 export interface SvmSignerConfig {
@@ -153,9 +155,9 @@ export function createFacilitator(config: FacilitatorConfig): x402Facilitator {
         );
 
         if (supportedV1Names.length > 0) {
-          // V1 uses network names (e.g., "base") not CAIP IDs
-          facilitator.register(
-            supportedV1Names as NetworkId[],
+          // V1 uses network names (e.g., "base") and must be registered under x402Version=1.
+          facilitator.registerV1(
+            supportedV1Names as unknown as NetworkId[],
             new ExactEvmSchemeV1(evmConfig.signer, {
               deployERC4337WithEIP6492: evmConfig.deployERC4337WithEIP6492,
             })
