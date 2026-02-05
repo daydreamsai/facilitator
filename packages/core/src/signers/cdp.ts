@@ -8,6 +8,7 @@ import type { CdpClient, EvmServerAccount } from "@coinbase/cdp-sdk";
 import { toFacilitatorEvmSigner, type FacilitatorEvmSigner } from "@x402/evm";
 import {
   createPublicClient,
+  defineChain,
   encodeFunctionData,
   http,
   type Address,
@@ -24,13 +25,47 @@ import {
   avalancheFuji,
   base,
   baseSepolia,
+  bsc,
+  bscTestnet,
+  gnosis,
   mainnet,
   optimism,
   optimismSepolia,
   polygon,
   polygonAmoy,
+  scroll,
+  scrollSepolia,
   sepolia,
 } from "viem/chains";
+
+// ============================================================================
+// Custom Chain Definitions
+// ============================================================================
+
+const monad = defineChain({
+  id: 143,
+  name: 'Monad',
+  nativeCurrency: { name: 'Monad', symbol: 'MON', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://rpc.monad.xyz'] },
+  },
+  blockExplorers: {
+    default: { name: 'MonadScan', url: 'https://explorer.monad.xyz' },
+  },
+});
+
+const monadTestnet = defineChain({
+  id: 10143,
+  name: 'Monad Testnet',
+  nativeCurrency: { name: 'Monad', symbol: 'MON', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://testnet-rpc.monad.xyz'] },
+  },
+  blockExplorers: {
+    default: { name: 'Monad Testnet Explorer', url: 'https://testnet.monadexplorer.com' },
+  },
+  testnet: true,
+});
 
 // ============================================================================
 // Types
@@ -46,12 +81,19 @@ export type CdpNetwork =
   | "avalanche-fuji"
   | "base"
   | "base-sepolia"
+  | "bsc"
+  | "bsc-testnet"
   | "ethereum"
   | "ethereum-sepolia"
+  | "gnosis"
+  | "monad"
+  | "monad-testnet"
   | "optimism"
   | "optimism-sepolia"
   | "polygon"
   | "polygon-amoy"
+  | "scroll"
+  | "scroll-sepolia"
   | (string & {}); // Allow any string for forward compatibility
 
 /** Configuration for creating a CDP signer */
@@ -74,9 +116,14 @@ export interface CdpSignerConfig {
 const CAIP2_TO_CDP_NETWORK: Record<number, CdpNetwork> = {
   1: "ethereum",
   10: "optimism",
+  56: "bsc",
+  97: "bsc-testnet",
+  100: "gnosis",
   137: "polygon",
+  143: "monad",
   2741: "abstract",
   8453: "base",
+  10143: "monad-testnet",
   11124: "abstract-testnet",
   11155111: "ethereum-sepolia",
   11155420: "optimism-sepolia",
@@ -86,6 +133,8 @@ const CAIP2_TO_CDP_NETWORK: Record<number, CdpNetwork> = {
   80002: "polygon-amoy",
   84532: "base-sepolia",
   421614: "arbitrum-sepolia",
+  534351: "scroll-sepolia",
+  534352: "scroll",
 };
 
 /** Map CDP network names to viem Chain configs */
@@ -98,12 +147,19 @@ const CDP_NETWORK_TO_CHAIN: Record<string, Chain> = {
   "avalanche-fuji": avalancheFuji,
   base: base,
   "base-sepolia": baseSepolia,
+  bsc: bsc,
+  "bsc-testnet": bscTestnet,
   ethereum: mainnet,
   "ethereum-sepolia": sepolia,
+  gnosis: gnosis,
+  monad: monad,
+  "monad-testnet": monadTestnet,
   optimism: optimism,
   "optimism-sepolia": optimismSepolia,
   polygon: polygon,
   "polygon-amoy": polygonAmoy,
+  scroll: scroll,
+  "scroll-sepolia": scrollSepolia,
 };
 
 /**

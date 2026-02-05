@@ -11,7 +11,7 @@ import {
   type FacilitatorRpcConfig,
   type FacilitatorSvmSigner,
 } from "@x402/svm";
-import { createWalletClient, http, publicActions, type Chain } from "viem";
+import { createWalletClient, defineChain, http, publicActions, type Chain } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import {
   abstract,
@@ -22,15 +22,49 @@ import {
   avalancheFuji,
   base,
   baseSepolia,
+  bsc,
+  bscTestnet,
+  gnosis,
   mainnet,
   optimism,
   optimismSepolia,
   polygon,
   polygonAmoy,
+  scroll,
+  scrollSepolia,
   sepolia,
 } from "viem/chains";
 
 import { EVM_PRIVATE_KEY, SVM_PRIVATE_KEY } from "../config.js";
+
+// ============================================================================
+// Custom Chain Definitions
+// ============================================================================
+
+const monad = defineChain({
+  id: 143,
+  name: 'Monad',
+  nativeCurrency: { name: 'Monad', symbol: 'MON', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://rpc.monad.xyz'] },
+  },
+  blockExplorers: {
+    default: { name: 'MonadScan', url: 'https://explorer.monad.xyz' },
+  },
+});
+
+const monadTestnet = defineChain({
+  id: 10143,
+  name: 'Monad Testnet',
+  nativeCurrency: { name: 'Monad', symbol: 'MON', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://testnet-rpc.monad.xyz'] },
+  },
+  blockExplorers: {
+    default: { name: 'Monad Testnet Explorer', url: 'https://testnet.monadexplorer.com' },
+  },
+  testnet: true,
+});
 
 // ============================================================================
 // Network to Chain Mapping
@@ -45,11 +79,18 @@ const NETWORK_TO_CHAIN: Record<string, Chain> = {
   "avalanche-fuji": avalancheFuji,
   base,
   "base-sepolia": baseSepolia,
+  bsc,
+  "bsc-testnet": bscTestnet,
   ethereum: mainnet,
+  gnosis,
+  monad,
+  "monad-testnet": monadTestnet,
   optimism,
   "optimism-sepolia": optimismSepolia,
   polygon,
   "polygon-amoy": polygonAmoy,
+  scroll,
+  "scroll-sepolia": scrollSepolia,
   sepolia,
 };
 
