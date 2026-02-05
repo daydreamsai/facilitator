@@ -20,6 +20,7 @@ import { node } from "@elysiajs/node";
 import { HTTPFacilitatorClient } from "@x402/core/http";
 import { createPaywall, evmPaywall, svmPaywall } from "@x402/paywall";
 import Redis from "ioredis";
+import pg from "pg";
 
 import { createElysiaPaidRoutes } from "@daydreamsai/facilitator/elysia";
 import {
@@ -36,12 +37,16 @@ import {
 import {
   createResourceTrackingModule,
   InMemoryResourceTrackingStore,
+  PostgresResourceTrackingStore,
+  type PostgresClientAdapter,
 } from "@daydreamsai/facilitator/tracking";
 import { getRpcUrl } from "@daydreamsai/facilitator/config";
 
 // ============================================================================
 // Configuration
 // ============================================================================
+
+const { Pool } = pg;
 
 const PORT = Number(4022);
 const FACILITATOR_URL =
@@ -54,6 +59,12 @@ const REDIS_SWEEPER_LOCK_KEY =
 const RESOURCE_TRACKING_AUTO_PRUNE_DAYS = Number(
   process.env.RESOURCE_TRACKING_AUTO_PRUNE_DAYS ?? "0"
 );
+const RESOURCE_TRACKING_DATABASE_URL =
+  process.env.RESOURCE_TRACKING_DATABASE_URL;
+const RESOURCE_TRACKING_SCHEMA =
+  process.env.RESOURCE_TRACKING_SCHEMA ?? "public";
+const RESOURCE_TRACKING_TABLE =
+  process.env.RESOURCE_TRACKING_TABLE ?? "resource_call_records";
 
 const evmRpcUrl = getRpcUrl("base") ?? "https://mainnet.base.org";
 const evmSigner = createPrivateKeyEvmSigner({
@@ -81,8 +92,41 @@ const sweeperLock = redis
     })
   : undefined;
 
+const pgPool = RESOURCE_TRACKING_DATABASE_URL
+  ? new Pool({ connectionString: RESOURCE_TRACKING_DATABASE_URL })
+  : undefined;
+
+const pgClient: PostgresClientAdapter | undefined = pgPool
+  ? {
+      query: async (sql, params) => {
+        const result = await pgPool.query(sql, params);
+        return result.rows;
+      },
+      queryOne: async (sql, params) => {
+        const result = await pgPool.query(sql, params);
+        return result.rows[0];
+      },
+      queryScalar: async (sql, params) => {
+        const result = await pgPool.query(sql, params);
+        const row = result.rows[0];
+        return row ? (Object.values(row)[0] as unknown) : undefined;
+      },
+    }
+  : undefined;
+
+const trackingStore = pgClient
+  ? new PostgresResourceTrackingStore(pgClient, {
+      schema: RESOURCE_TRACKING_SCHEMA,
+      tableName: RESOURCE_TRACKING_TABLE,
+    })
+  : new InMemoryResourceTrackingStore();
+
+if (trackingStore instanceof PostgresResourceTrackingStore) {
+  await trackingStore.initialize();
+}
+
 const resourceTracking = createResourceTrackingModule({
-  store: new InMemoryResourceTrackingStore(),
+  store: trackingStore,
   ...(RESOURCE_TRACKING_AUTO_PRUNE_DAYS > 0
     ? { autoPruneDays: RESOURCE_TRACKING_AUTO_PRUNE_DAYS }
     : {}),
@@ -226,10 +270,17 @@ Endpoints:
   POST /api/upto-close       - Close and settle session
 `);
 
-const shutdown = (): void => {
+const shutdown = async (): Promise<void> => {
   resourceTracking.stopAutoPrune();
+  if (pgPool) {
+    await pgPool.end();
+  }
   process.exit(0);
 };
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+const handleSignal = (): void => {
+  void shutdown();
+};
+
+process.on("SIGINT", handleSignal);
+process.on("SIGTERM", handleSignal);
