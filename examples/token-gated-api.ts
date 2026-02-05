@@ -6,7 +6,9 @@
  *
  * Users must hold at least 100 USDC on Base to access the protected endpoints.
  *
- * Run with: bun run examples/token-gated-api.ts
+ * Run with:
+ *   cd examples
+ *   bun run token-gated:api
  */
 
 import { Elysia } from "elysia";

@@ -15,6 +15,7 @@
     "smoke:client": "bun run smokeClient.ts",
     "starknet:api": "bun run starknetApi.ts",
     "starknet:client": "bun run starknetClient.ts",
+    "token-gated:api": "bun run token-gated-api.ts",
     "token-metered:api": "bun run tokenMeteredApi.ts",
     "token-metered:client": "bun run tokenMeteredClient.ts",
     "upto": "bun run uptoModule.ts"

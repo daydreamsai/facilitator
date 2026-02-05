@@ -315,6 +315,25 @@ bun run examples/paidApiAll.ts
 
 See `examples/paidApiAll.ts` for the full route config.
 
+### Token-Gated Endpoint Example
+
+This repo includes a token-gated API example that checks ERC20 balances before
+allowing access to protected routes.
+
+Run the example:
+
+```bash
+cd examples
+bun run token-gated:api
+```
+
+Call a protected route with a wallet address:
+
+```bash
+curl -H "x-wallet-address: 0xYourWalletAddress" \
+  http://localhost:3000/api/premium
+```
+
 ## Configuration
 
 ### Environment Variables
