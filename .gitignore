@@ -1,4 +1,4 @@
 node_modules
 .env
 dist
-.claude/tsc-cache
+.claude/
