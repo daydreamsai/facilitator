@@ -9,9 +9,17 @@ import {
   resolveHttpServer,
   resolvePaywallConfig,
   DEFAULT_PAYMENT_HEADER_ALIASES,
+  processBeforeHandle,
+  processAfterHandle,
   type BasePaymentMiddlewareConfig,
 } from "../../src/middleware/core.js";
 import type { UptoModule } from "../../src/upto/lib.js";
+import type { ResourceTrackingModule } from "../../src/tracking/lib.js";
+import type {
+  HTTPAdapter,
+  HTTPProcessResult,
+  x402HTTPResourceServer,
+} from "@x402/core/http";
 import type { FacilitatorClient } from "@x402/core/server";
 
 const createMockUptoModule = (): UptoModule =>
@@ -344,5 +352,215 @@ describe("resolvePaywallConfig", () => {
     const result = await resolvePaywallConfig(fn, ctx);
 
     expect(result).toEqual(paywallConfig);
+  });
+});
+
+const createMockAdapter = (): HTTPAdapter =>
+  ({
+    getPath: () => "/free",
+    getMethod: () => "GET",
+    getUrl: () => "http://localhost/free",
+    getHeader: () => null,
+    getUserAgent: () => "test-agent",
+    getQueryParams: () => ({}),
+    getAcceptHeader: () => "application/json",
+  }) as unknown as HTTPAdapter;
+
+describe("resource tracking integration", () => {
+  it("updates paymentRequired for non-paywall responses", async () => {
+    const adapter = createMockAdapter();
+    const httpServer = {
+      processHTTPRequest: async () =>
+        ({ type: "payment-not-required" } as unknown as HTTPProcessResult),
+    } as unknown as x402HTTPResourceServer;
+
+    const recordRequest = mock(async () => {});
+    const resourceTracking = {
+      store: {} as unknown,
+      captureHeaders: [],
+      startTracking: mock(async () => "track-1"),
+      recordRequest,
+      recordVerification: mock(async () => {}),
+      recordSettlement: mock(async () => {}),
+      recordUptoSession: mock(async () => {}),
+      finalizeTracking: mock(async () => {}),
+      list: mock(async () => ({ records: [], total: 0, hasMore: false })),
+      getStats: mock(async () => ({})),
+      get: mock(async () => undefined),
+      prune: mock(async () => 0),
+    } as unknown as ResourceTrackingModule;
+
+    const result = await processBeforeHandle({
+      httpServer,
+      adapter,
+      paywallConfig: undefined,
+      uptoModule: undefined,
+      autoTrack: false,
+      resourceTracking,
+    });
+
+    expect(result.action).toBe("continue");
+    expect(recordRequest.mock.calls.length).toBe(1);
+    const [id, updates] = recordRequest.mock.calls[0];
+    expect(id).toBe("track-1");
+    expect(updates.paymentRequired).toBe(false);
+  });
+
+  it("does not throw when tracking hooks fail in processBeforeHandle", async () => {
+    const adapter = createMockAdapter();
+    const httpServer = {
+      processHTTPRequest: async () =>
+        ({
+          type: "payment-verified",
+          paymentPayload: {},
+          paymentRequirements: {
+            scheme: "exact",
+            network: "eip155:1",
+            asset: "0xtoken",
+            amount: "1",
+            payTo: "0xrecipient",
+          },
+        }) as unknown as HTTPProcessResult,
+    } as unknown as x402HTTPResourceServer;
+
+    const resourceTracking = {
+      store: {} as unknown,
+      captureHeaders: [],
+      startTracking: mock(async () => {
+        throw new Error("tracking boom");
+      }),
+      recordRequest: mock(async () => {
+        throw new Error("tracking boom");
+      }),
+      recordVerification: mock(async () => {
+        throw new Error("tracking boom");
+      }),
+      recordSettlement: mock(async () => {
+        throw new Error("tracking boom");
+      }),
+      recordUptoSession: mock(async () => {
+        throw new Error("tracking boom");
+      }),
+      finalizeTracking: mock(async () => {
+        throw new Error("tracking boom");
+      }),
+      list: mock(async () => ({ records: [], total: 0, hasMore: false })),
+      getStats: mock(async () => ({})),
+      get: mock(async () => undefined),
+      prune: mock(async () => 0),
+    } as unknown as ResourceTrackingModule;
+
+    await expect(
+      processBeforeHandle({
+        httpServer,
+        adapter,
+        paywallConfig: undefined,
+        uptoModule: undefined,
+        autoTrack: false,
+        resourceTracking,
+      })
+    ).resolves.toMatchObject({ action: "continue" });
+  });
+
+  it("honors handlerExecuted when finalizing tracking", async () => {
+    const httpServer = {
+      processSettlement: async () => ({ success: true, headers: {} }),
+    } as unknown as x402HTTPResourceServer;
+
+    const finalizeTracking = mock(async () => {});
+    const resourceTracking = {
+      store: {} as unknown,
+      captureHeaders: [],
+      startTracking: mock(async () => "track-1"),
+      recordRequest: mock(async () => {}),
+      recordVerification: mock(async () => {}),
+      recordSettlement: mock(async () => {}),
+      recordUptoSession: mock(async () => {}),
+      finalizeTracking,
+      list: mock(async () => ({ records: [], total: 0, hasMore: false })),
+      getStats: mock(async () => ({})),
+      get: mock(async () => undefined),
+      prune: mock(async () => 0),
+    } as unknown as ResourceTrackingModule;
+
+    const state = {
+      result: {
+        type: "payment-error",
+        response: {
+          status: 402,
+          headers: {},
+          body: {},
+        },
+      } as unknown as HTTPProcessResult,
+      resourceTrackingId: "track-1",
+    };
+
+    await processAfterHandle({
+      httpServer,
+      state,
+      autoSettle: true,
+      resourceTracking,
+      responseStatus: 402,
+      startTimeMs: Date.now(),
+      handlerExecuted: false,
+    });
+
+    expect(finalizeTracking.mock.calls.length).toBe(1);
+    const [id, status, _responseTimeMs, handlerExecuted] =
+      finalizeTracking.mock.calls[0];
+    expect(id).toBe("track-1");
+    expect(status).toBe(402);
+    expect(handlerExecuted).toBe(false);
+  });
+
+  it("does not throw when tracking hooks fail in processAfterHandle", async () => {
+    const httpServer = {
+      processSettlement: async () => ({ success: true, headers: {} }),
+    } as unknown as x402HTTPResourceServer;
+
+    const resourceTracking = {
+      store: {} as unknown,
+      captureHeaders: [],
+      startTracking: mock(async () => "track-1"),
+      recordRequest: mock(async () => {}),
+      recordVerification: mock(async () => {}),
+      recordSettlement: mock(async () => {
+        throw new Error("tracking boom");
+      }),
+      recordUptoSession: mock(async () => {}),
+      finalizeTracking: mock(async () => {
+        throw new Error("tracking boom");
+      }),
+      list: mock(async () => ({ records: [], total: 0, hasMore: false })),
+      getStats: mock(async () => ({})),
+      get: mock(async () => undefined),
+      prune: mock(async () => 0),
+    } as unknown as ResourceTrackingModule;
+
+    const state = {
+      result: {
+        type: "payment-verified",
+        paymentPayload: {},
+        paymentRequirements: {
+          scheme: "exact",
+          network: "eip155:1",
+          asset: "0xtoken",
+          amount: "1",
+          payTo: "0xrecipient",
+        },
+      } as unknown as HTTPProcessResult,
+      resourceTrackingId: "track-1",
+    };
+
+    await expect(
+      processAfterHandle({
+        httpServer,
+        state,
+        autoSettle: true,
+        resourceTracking,
+        responseStatus: 200,
+        startTimeMs: Date.now(),
+      })
+    ).resolves.toEqual({ headers: {} });
   });
 });

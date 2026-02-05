@@ -20,6 +20,7 @@ import { node } from "@elysiajs/node";
 import { HTTPFacilitatorClient } from "@x402/core/http";
 import { createPaywall, evmPaywall, svmPaywall } from "@x402/paywall";
 import Redis from "ioredis";
+import pg from "pg";
 
 import { createElysiaPaidRoutes } from "@daydreamsai/facilitator/elysia";
 import {
@@ -33,11 +34,19 @@ import {
   RedisUptoSessionStore,
   formatSession,
 } from "@daydreamsai/facilitator/upto";
+import {
+  createResourceTrackingModule,
+  InMemoryResourceTrackingStore,
+  PostgresResourceTrackingStore,
+  type PostgresClientAdapter,
+} from "@daydreamsai/facilitator/tracking";
 import { getRpcUrl } from "@daydreamsai/facilitator/config";
 
 // ============================================================================
 // Configuration
 // ============================================================================
+
+const { Pool } = pg;
 
 const PORT = Number(4022);
 const FACILITATOR_URL =
@@ -47,6 +56,15 @@ const REDIS_URL = process.env.REDIS_URL;
 const REDIS_PREFIX = process.env.REDIS_PREFIX ?? "facilitator:upto";
 const REDIS_SWEEPER_LOCK_KEY =
   process.env.REDIS_SWEEPER_LOCK_KEY ?? `${REDIS_PREFIX}:sweeper:lock`;
+const RESOURCE_TRACKING_AUTO_PRUNE_DAYS = Number(
+  process.env.RESOURCE_TRACKING_AUTO_PRUNE_DAYS ?? "0"
+);
+const RESOURCE_TRACKING_DATABASE_URL =
+  process.env.RESOURCE_TRACKING_DATABASE_URL;
+const RESOURCE_TRACKING_SCHEMA =
+  process.env.RESOURCE_TRACKING_SCHEMA ?? "public";
+const RESOURCE_TRACKING_TABLE =
+  process.env.RESOURCE_TRACKING_TABLE ?? "resource_call_records";
 
 const evmRpcUrl = getRpcUrl("base") ?? "https://mainnet.base.org";
 const evmSigner = createPrivateKeyEvmSigner({
@@ -73,6 +91,54 @@ const sweeperLock = redis
       useOptionsStyle: false,
     })
   : undefined;
+
+const pgPool = RESOURCE_TRACKING_DATABASE_URL
+  ? new Pool({ connectionString: RESOURCE_TRACKING_DATABASE_URL })
+  : undefined;
+
+// Drizzle users can reuse the same Pool instance:
+// import { drizzle } from "drizzle-orm/node-postgres";
+// const db = drizzle(pgPool);
+
+const pgClient: PostgresClientAdapter | undefined = pgPool
+  ? {
+      query: async (sql, params) => {
+        const result = await pgPool.query(sql, params);
+        return result.rows;
+      },
+      queryOne: async (sql, params) => {
+        const result = await pgPool.query(sql, params);
+        return result.rows[0];
+      },
+      queryScalar: async (sql, params) => {
+        const result = await pgPool.query(sql, params);
+        const row = result.rows[0];
+        return row ? (Object.values(row)[0] as unknown) : undefined;
+      },
+    }
+  : undefined;
+
+const trackingStore = pgClient
+  ? new PostgresResourceTrackingStore(pgClient, {
+      schema: RESOURCE_TRACKING_SCHEMA,
+      tableName: RESOURCE_TRACKING_TABLE,
+    })
+  : new InMemoryResourceTrackingStore();
+
+if (trackingStore instanceof PostgresResourceTrackingStore) {
+  await trackingStore.initialize();
+}
+
+const resourceTracking = createResourceTrackingModule({
+  store: trackingStore,
+  ...(RESOURCE_TRACKING_AUTO_PRUNE_DAYS > 0
+    ? { autoPruneDays: RESOURCE_TRACKING_AUTO_PRUNE_DAYS }
+    : {}),
+  onTrackingError: (err, id) => {
+    // eslint-disable-next-line no-console
+    console.warn(`[resource-tracking:${id}]`, err);
+  },
+});
 
 // Create upto module for session store + manual settlement
 const upto = createUptoModule({
@@ -111,6 +177,7 @@ createElysiaPaidRoutes(app, {
     resourceServer,
     upto,
     paywallProvider,
+    resourceTracking,
     paywallConfig: {
       appName: "Paid API Example",
       testnet: true,
@@ -206,3 +273,18 @@ Endpoints:
   GET  /api/upto-session/:id - Check session status
   POST /api/upto-close       - Close and settle session
 `);
+
+const shutdown = async (): Promise<void> => {
+  resourceTracking.stopAutoPrune();
+  if (pgPool) {
+    await pgPool.end();
+  }
+  process.exit(0);
+};
+
+const handleSignal = (): void => {
+  void shutdown();
+};
+
+process.on("SIGINT", handleSignal);
+process.on("SIGTERM", handleSignal);

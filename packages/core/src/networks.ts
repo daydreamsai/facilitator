@@ -132,6 +132,14 @@ export const EVM_NETWORKS = {
     public: "https://rpc-amoy.polygon.technology",
   },
 
+  // Gnosis
+  gnosis: {
+    chainId: 100,
+    caip: "eip155:100",
+    alchemy: "gno-mainnet.g.alchemy.com/v2",
+    public: "https://rpc.gnosischain.com",
+  },
+
   // Arbitrum
   arbitrum: {
     chainId: 42161,
@@ -162,6 +170,20 @@ export const EVM_NETWORKS = {
     public: "https://sepolia.optimism.io",
   },
 
+  // Scroll
+  scroll: {
+    chainId: 534352,
+    caip: "eip155:534352",
+    alchemy: "scroll-mainnet.g.alchemy.com/v2",
+    public: "https://rpc.scroll.io",
+  },
+  "scroll-sepolia": {
+    chainId: 534351,
+    caip: "eip155:534351",
+    alchemy: "scroll-sepolia.g.alchemy.com/v2",
+    public: "https://sepolia-rpc.scroll.io",
+  },
+
   // Avalanche
   avalanche: {
     chainId: 43114,
@@ -176,6 +198,19 @@ export const EVM_NETWORKS = {
     public: "https://api.avax-test.network/ext/bc/C/rpc",
   },
 
+  // BNB Smart Chain
+  bsc: {
+    chainId: 56,
+    caip: "eip155:56",
+    alchemy: "bnb-mainnet.g.alchemy.com/v2",
+    public: "https://bsc-dataseed.binance.org",
+  },
+  "bsc-testnet": {
+    chainId: 97,
+    caip: "eip155:97",
+    public: "https://data-seed-prebsc-1-s1.binance.org:8545",
+  },
+
   // Abstract
   abstract: {
     chainId: 2741,
@@ -188,6 +223,18 @@ export const EVM_NETWORKS = {
     caip: "eip155:11124",
     alchemy: "abstract-testnet.g.alchemy.com/v2",
     public: "https://api.testnet.abs.xyz",
+  },
+
+  // Monad
+  monad: {
+    chainId: 143,
+    caip: "eip155:143",
+    public: "https://rpc.monad.xyz",
+  },
+  "monad-testnet": {
+    chainId: 10143,
+    caip: "eip155:10143",
+    public: "https://testnet-rpc.monad.xyz",
   },
 } as const satisfies Record<string, EvmNetworkConfig>;
 

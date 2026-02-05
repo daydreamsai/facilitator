@@ -16,6 +16,12 @@ import {
   type UptoModule,
 } from "../upto/lib.js";
 import { createResourceServer, type ResourceServerConfig } from "../server.js";
+import type { ResourceTrackingModule } from "../tracking/lib.js";
+import {
+  extractPaymentDetails,
+  extractRequestMetadata,
+  extractRouteConfig,
+} from "../tracking/helpers.js";
 
 // -----------------------------------------------------------------------------
 // Shared Types
@@ -24,6 +30,8 @@ import { createResourceServer, type ResourceServerConfig } from "../server.js";
 export interface PaymentState {
   result: HTTPProcessResult;
   tracking?: TrackingResult;
+  /** Resource tracking ID for settlement tracking */
+  resourceTrackingId?: string;
 }
 
 export interface BasePaymentMiddlewareConfig {
@@ -37,6 +45,8 @@ export interface BasePaymentMiddlewareConfig {
   paymentHeaderAliases?: string[];
   autoSettle?: boolean;
   upto?: UptoModule;
+  /** Resource tracking module for settlement tracking */
+  resourceTracking?: ResourceTrackingModule;
 }
 
 export const DEFAULT_PAYMENT_HEADER_ALIASES = ["x-payment"];
@@ -182,30 +192,86 @@ export interface ProcessBeforeHandleOptions {
   paywallConfig: PaywallConfig | undefined;
   uptoModule: UptoModule | undefined;
   autoTrack: boolean;
+  /** Resource tracking module for settlement tracking */
+  resourceTracking?: ResourceTrackingModule;
 }
 
 export async function processBeforeHandle(
   options: ProcessBeforeHandleOptions
 ): Promise<BeforeHandleResult> {
-  const { httpServer, adapter, paywallConfig, uptoModule, autoTrack } = options;
+  const { httpServer, adapter, paywallConfig, uptoModule, autoTrack, resourceTracking } = options;
   const path = adapter.getPath();
+  const method = adapter.getMethod();
+
+  const safeTrack = async (fn: () => Promise<void>): Promise<void> => {
+    try {
+      await fn();
+    } catch {
+      // Best-effort tracking: never block the request
+    }
+  };
+
+  // Start resource tracking if module is configured
+  let resourceTrackingId: string | undefined;
+  if (resourceTracking) {
+    const captureHeaders = resourceTracking.captureHeaders ?? [];
+    try {
+      resourceTrackingId = await resourceTracking.startTracking({
+        method,
+        path,
+        url: adapter.getUrl(),
+        request: extractRequestMetadata(adapter, captureHeaders),
+        paymentRequired: true, // Will be updated based on result
+      });
+    } catch {
+      resourceTrackingId = undefined;
+    }
+  }
 
   const result = await httpServer.processHTTPRequest(
     {
       adapter,
       path,
-      method: adapter.getMethod(),
+      method,
     },
     paywallConfig
   );
 
-  let state: PaymentState = { result };
+  let state: PaymentState = { result, resourceTrackingId };
+  const paymentRequired =
+    result.type === "payment-error" || result.type === "payment-verified";
+
+  if (resourceTracking && resourceTrackingId) {
+    const routeConfig =
+      result.type === "payment-verified"
+        ? extractRouteConfig(result.paymentRequirements)
+        : undefined;
+    await safeTrack(async () => {
+      await resourceTracking.recordRequest(resourceTrackingId, {
+        paymentRequired,
+        routeConfig,
+      });
+    });
+  }
 
   if (result.type === "payment-error") {
     const headers: Record<string, string> = {};
     for (const [key, value] of Object.entries(result.response.headers)) {
       headers[key] = String(value);
     }
+
+    // Record verification failure
+    if (resourceTracking && resourceTrackingId) {
+      await safeTrack(async () => {
+        await resourceTracking.recordVerification(
+          resourceTrackingId,
+          false,
+          undefined,
+          "payment_error"
+        );
+      });
+    }
+
     return {
       action: "error",
       state,
@@ -214,6 +280,17 @@ export async function processBeforeHandle(
       body: result.response.body,
       isHtml: result.response.isHtml,
     };
+  }
+
+  // Record successful verification with payment details
+  if (result.type === "payment-verified" && resourceTracking && resourceTrackingId) {
+    const payment = extractPaymentDetails(
+      result.paymentPayload,
+      result.paymentRequirements
+    );
+    await safeTrack(async () => {
+      await resourceTracking.recordVerification(resourceTrackingId, true, payment);
+    });
   }
 
   if (
@@ -231,7 +308,18 @@ export async function processBeforeHandle(
         result.paymentRequirements
       );
 
-      state = { result, tracking };
+      state = { result, tracking, resourceTrackingId };
+
+      // Record upto session info
+      if (resourceTracking && resourceTrackingId) {
+        await safeTrack(async () => {
+          await resourceTracking.recordUptoSession(resourceTrackingId, {
+            sessionId: tracking.sessionId,
+            trackingSuccess: tracking.success,
+            trackingError: tracking.success ? undefined : tracking.error,
+          });
+        });
+      }
 
       if (!tracking.success) {
         return {
@@ -263,15 +351,51 @@ export interface ProcessAfterHandleOptions {
   httpServer: x402HTTPResourceServer;
   state: PaymentState | null | undefined;
   autoSettle: boolean;
+  /** Resource tracking module for settlement tracking */
+  resourceTracking?: ResourceTrackingModule;
+  /** HTTP response status code */
+  responseStatus?: number;
+  /** Request start time for calculating response time */
+  startTimeMs?: number;
+  /** Whether the route handler executed */
+  handlerExecuted?: boolean;
 }
 
 export async function processAfterHandle(
   options: ProcessAfterHandleOptions
 ): Promise<AfterHandleResult> {
-  const { httpServer, state, autoSettle } = options;
+  const { httpServer, state, autoSettle, resourceTracking, responseStatus, startTimeMs } = options;
   const headers: Record<string, string> = {};
+  const handlerExecuted = options.handlerExecuted ?? true;
+
+  const safeTrack = async (fn: () => Promise<void>): Promise<void> => {
+    try {
+      await fn();
+    } catch {
+      // Best-effort tracking: never block the response
+    }
+  };
+
+  // Calculate response time if start time was provided
+  const responseTimeMs = startTimeMs ? Date.now() - startTimeMs : 0;
+
+  // Finalize tracking with response info (even if no payment was verified)
+  const finalizeTracking = async (handlerExecuted: boolean) => {
+    const trackingId = state?.resourceTrackingId;
+    if (resourceTracking && trackingId) {
+      await safeTrack(async () => {
+        await resourceTracking.finalizeTracking(
+          trackingId,
+          responseStatus ?? 200,
+          responseTimeMs,
+          handlerExecuted
+        );
+      });
+    }
+  };
 
   if (!state || state.result.type !== "payment-verified") {
+    await finalizeTracking(handlerExecuted);
     return { headers };
   }
 
@@ -279,10 +403,12 @@ export async function processAfterHandle(
     if (state.tracking?.success) {
       headers["x-upto-session-id"] = state.tracking.sessionId;
     }
+    await finalizeTracking(handlerExecuted);
     return { headers };
   }
 
   if (!autoSettle) {
+    await finalizeTracking(handlerExecuted);
     return { headers };
   }
 
@@ -291,12 +417,27 @@ export async function processAfterHandle(
     state.result.paymentRequirements
   );
 
+  // Record settlement result
+  if (resourceTracking && state.resourceTrackingId) {
+    const trackingId = state.resourceTrackingId;
+    await safeTrack(async () => {
+      await resourceTracking.recordSettlement(trackingId, {
+        attempted: true,
+        success: settlement.success,
+        transactionHash: settlement.transaction,
+        errorMessage: settlement.errorReason,
+        settledAtMs: Date.now(),
+      });
+    });
+  }
+
   if (settlement.success) {
     for (const [key, value] of Object.entries(settlement.headers)) {
       headers[key] = String(value);
     }
   }
 
+  await finalizeTracking(handlerExecuted);
   return { headers };
 }
 
@@ -322,3 +463,5 @@ export type {
 
 export { x402HTTPResourceServer } from "@x402/core/http";
 export type { x402ResourceServer, FacilitatorClient } from "@x402/core/server";
+
+export type { ResourceTrackingModule } from "../tracking/lib.js";

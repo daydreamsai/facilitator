@@ -1,9 +1,10 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, mock } from "bun:test";
 import express from "express";
 import type { x402HTTPResourceServer } from "@x402/core/http";
 
 import { createExpressPaymentMiddleware } from "../../src/express/index.js";
 import { createUptoModule } from "../../src/upto/module.js";
+import type { ResourceTrackingModule } from "../../src/tracking/lib.js";
 
 // Helper to make requests to express app
 async function request(
@@ -109,6 +110,52 @@ describe("Express payment middleware", () => {
     expect(response.status).toBe(402);
     const body = await response.json();
     expect(body).toEqual({ error: "Payment required" });
+  });
+
+  it("finalizes tracking on payment-error responses", async () => {
+    const httpServer = {
+      registerPaywallProvider: () => {},
+      initialize: async () => {},
+      processHTTPRequest: async () => ({
+        type: "payment-error",
+        response: {
+          status: 402,
+          headers: { "content-type": "application/json" },
+          body: { error: "Payment required" },
+        },
+      }),
+      processSettlement: async () => ({ success: false, headers: {} }),
+    } as unknown as x402HTTPResourceServer;
+
+    const finalizeTracking = mock(async () => {});
+    const resourceTracking = {
+      store: {} as unknown,
+      captureHeaders: [],
+      startTracking: mock(async () => "track-1"),
+      recordRequest: mock(async () => {}),
+      recordVerification: mock(async () => {}),
+      recordSettlement: mock(async () => {}),
+      recordUptoSession: mock(async () => {}),
+      finalizeTracking,
+      list: mock(async () => ({ records: [], total: 0, hasMore: false })),
+      getStats: mock(async () => ({})),
+      get: mock(async () => undefined),
+      prune: mock(async () => 0),
+    } as unknown as ResourceTrackingModule;
+
+    const app = express();
+    app.use(createExpressPaymentMiddleware({ httpServer, resourceTracking }));
+    app.get("/premium", (_req, res) => res.send("should not reach"));
+
+    const response = await request(app, "/premium");
+
+    expect(response.status).toBe(402);
+    expect(finalizeTracking.mock.calls.length).toBe(1);
+    const [id, status, _responseTimeMs, handlerExecuted] =
+      finalizeTracking.mock.calls[0];
+    expect(id).toBe("track-1");
+    expect(status).toBe(402);
+    expect(handlerExecuted).toBe(false);
   });
 
   it("skips settlement for upto scheme and adds session header", async () => {

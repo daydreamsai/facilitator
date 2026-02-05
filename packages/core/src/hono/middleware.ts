@@ -5,6 +5,7 @@ import {
   type PaymentState,
   type BasePaymentMiddlewareConfig,
   type PaywallConfig,
+  type ResourceTrackingModule,
   DEFAULT_PAYMENT_HEADER_ALIASES,
   isUptoModule,
   normalizePathCandidate,
@@ -22,7 +23,10 @@ import {
 // Types
 // -----------------------------------------------------------------------------
 
-export interface HonoPaymentState extends PaymentState {}
+export interface HonoPaymentState extends PaymentState {
+  /** Request start time for response time calculation */
+  __startTimeMs?: number;
+}
 
 export interface HonoPaymentMiddlewareConfig extends BasePaymentMiddlewareConfig {
   paywallConfig?:
@@ -80,6 +84,7 @@ export function createHonoPaymentMiddleware(
     config.paymentHeaderAliases ?? DEFAULT_PAYMENT_HEADER_ALIASES;
   const autoSettle = config.autoSettle ?? true;
   const uptoModule = config.upto;
+  const resourceTracking = config.resourceTracking;
 
   if (config.upto !== undefined && !isUptoModule(config.upto)) {
     throw new Error("Upto middleware requires an upto module.");
@@ -94,6 +99,8 @@ export function createHonoPaymentMiddleware(
   let initialized = false;
 
   return async (c, next) => {
+    const startTimeMs = Date.now();
+
     if (!initialized) {
       await httpServer.initialize();
       initialized = true;
@@ -119,13 +126,27 @@ export function createHonoPaymentMiddleware(
       paywallConfig,
       uptoModule,
       autoTrack,
+      resourceTracking,
     });
 
-    c.set("x402", result.state);
+    c.set("x402", { ...result.state, __startTimeMs: startTimeMs });
 
     if (result.action === "error") {
+      const afterResult = await processAfterHandle({
+        httpServer,
+        state: c.get("x402"),
+        autoSettle,
+        resourceTracking,
+        responseStatus: result.status,
+        startTimeMs: c.get("x402")?.__startTimeMs,
+        handlerExecuted: false,
+      });
+
       const headers = new Headers();
       for (const [key, value] of Object.entries(result.headers)) {
+        headers.set(key, value);
+      }
+      for (const [key, value] of Object.entries(afterResult.headers)) {
         headers.set(key, value);
       }
       if (result.isHtml) {
@@ -141,6 +162,18 @@ export function createHonoPaymentMiddleware(
     }
 
     if (result.action === "tracking-error") {
+      const afterResult = await processAfterHandle({
+        httpServer,
+        state: c.get("x402"),
+        autoSettle,
+        resourceTracking,
+        responseStatus: result.status,
+        startTimeMs: c.get("x402")?.__startTimeMs,
+        handlerExecuted: false,
+      });
+      for (const [key, value] of Object.entries(afterResult.headers)) {
+        c.header(key, value);
+      }
       return c.json(result.body, {
         status: result.status as 400,
       });
@@ -148,10 +181,14 @@ export function createHonoPaymentMiddleware(
 
     await next();
 
+    const state = c.get("x402");
     const afterResult = await processAfterHandle({
       httpServer,
-      state: c.get("x402"),
+      state,
       autoSettle,
+      resourceTracking,
+      responseStatus: c.res.status,
+      startTimeMs: state?.__startTimeMs,
     });
 
     for (const [key, value] of Object.entries(afterResult.headers)) {

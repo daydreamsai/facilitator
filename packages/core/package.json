@@ -78,6 +78,10 @@
     "./token-gate/cache/redis": {
       "import": "./dist/token-gate/cache/redis.js",
       "types": "./dist/token-gate/cache/redis.d.ts"
+    },
+    "./tracking": {
+      "import": "./dist/tracking/lib.js",
+      "types": "./dist/tracking/lib.d.ts"
     }
   },
   "files": [
