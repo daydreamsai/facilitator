@@ -1,42 +1,19 @@
 import { describe, it, expect, beforeEach, vi, afterAll } from "vitest";
 import { InMemoryTokenGateCache } from "../cache/memory.js";
 import type { TokenGateConfig } from "../types.js";
+import { createTokenGateChecker } from "../checker.js";
+import * as evmNetworks from "../networks/evm.js";
 
-// Mock the network checkers for this test file only
-// Note: This uses vi.mock which hoists - other tests importing these modules
-// in the same bun test run may see mocked versions
-vi.mock("../networks/evm.js", () => ({
-  checkEvmTokenBalance: vi.fn(),
-  parseEvmCaip2: vi.fn((caip: string) => {
-    const match = caip.match(/^eip155:(\d+)$/);
-    if (!match) return null;
-    const map: Record<string, string> = { "8453": "base", "1": "ethereum" };
-    return map[match[1]] ?? null;
-  }),
-  isEvmNetwork: vi.fn((caip: string) => caip.startsWith("eip155:")),
-}));
-
-vi.mock("../networks/svm.js", () => ({
-  checkSplTokenBalance: vi.fn(),
-  parseSvmCaip2: vi.fn((caip: string) => {
-    if (caip === "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") return "solana-mainnet";
-    return null;
-  }),
-  isSvmNetwork: vi.fn((caip: string) => caip.startsWith("solana:")),
-}));
-
-// Import after mocks are set up
-const { createTokenGateChecker } = await import("../checker.js");
+const mockCheckEvmBalance = vi.spyOn(evmNetworks, "checkEvmTokenBalance");
 
 afterAll(() => {
-  vi.restoreAllMocks();
+  mockCheckEvmBalance.mockRestore();
 });
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("TokenGateChecker", () => {
   let cache: InMemoryTokenGateCache;
-  let mockCheckEvmBalance: ReturnType<typeof vi.fn>;
 
   const baseConfig: TokenGateConfig = {
     requirement: {
@@ -49,11 +26,7 @@ describe("TokenGateChecker", () => {
 
   beforeEach(async () => {
     cache = new InMemoryTokenGateCache();
-    vi.clearAllMocks();
-
-    // Get the mocked function
-    const evmModule = await import("../networks/evm.js");
-    mockCheckEvmBalance = evmModule.checkEvmTokenBalance as ReturnType<typeof vi.fn>;
+    mockCheckEvmBalance.mockReset();
   });
 
   describe("check()", () => {

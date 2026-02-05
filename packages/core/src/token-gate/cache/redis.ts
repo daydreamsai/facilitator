@@ -7,20 +7,11 @@ import type { TokenGateCacheEntry, TokenGateCacheKey } from "../types.js";
  */
 export interface RedisClientLike {
   get(key: string): Promise<string | null>;
-  set(
-    key: string,
-    value: string,
-    px: "PX",
-    ttlMs: number
-  ): Promise<string | null>;
+  set(...args: any[]): Promise<string | null>;
   pttl(key: string): Promise<number>;
   del(...keys: string[]): Promise<number>;
   scan(
-    cursor: string,
-    match: "MATCH",
-    pattern: string,
-    count: "COUNT",
-    countVal: number
+    ...args: any[]
   ): Promise<[string, string[]]>;
 }
 

@@ -14,31 +14,13 @@ export type RedisClientLike = {
   srem?: (key: string, ...members: string[]) => Promise<number> | number;
   smembers?: (key: string) => Promise<string[]> | string[];
   scan?: (
-    cursor: string,
-    ...args: string[]
+    ...args: any[]
   ) => Promise<[string, string[]]> | [string, string[]];
   pexpire?: (key: string, ttlMs: number) => Promise<number> | number;
   persist?: (key: string) => Promise<number> | number;
-  set?: {
-    (
-      key: string,
-      value: string,
-      options?: RedisSetOptions
-    ): Promise<string | null> | string | null;
-    (
-      key: string,
-      value: string,
-      flag: string,
-      flagValue: number,
-      extraFlag?: string
-    ): Promise<string | null> | string | null;
-  };
+  set?: (...args: any[]) => Promise<string | null> | string | null;
   get?: (key: string) => Promise<string | null> | string | null;
-  eval?: (
-    script: string,
-    keys: string[],
-    args: string[]
-  ) => Promise<number> | number;
+  eval?: (...args: any[]) => Promise<unknown> | unknown;
 };
 
 export type RedisUptoSessionStoreOptions = {
