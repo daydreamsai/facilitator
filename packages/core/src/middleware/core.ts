@@ -381,10 +381,11 @@ export async function processAfterHandle(
 
   // Finalize tracking with response info (even if no payment was verified)
   const finalizeTracking = async (handlerExecuted: boolean) => {
-    if (resourceTracking && state?.resourceTrackingId) {
+    const trackingId = state?.resourceTrackingId;
+    if (resourceTracking && trackingId) {
       await safeTrack(async () => {
         await resourceTracking.finalizeTracking(
-          state.resourceTrackingId,
+          trackingId,
           responseStatus ?? 200,
           responseTimeMs,
           handlerExecuted
@@ -418,8 +419,9 @@ export async function processAfterHandle(
 
   // Record settlement result
   if (resourceTracking && state.resourceTrackingId) {
+    const trackingId = state.resourceTrackingId;
     await safeTrack(async () => {
-      await resourceTracking.recordSettlement(state.resourceTrackingId, {
+      await resourceTracking.recordSettlement(trackingId, {
         attempted: true,
         success: settlement.success,
         transactionHash: settlement.transaction,
