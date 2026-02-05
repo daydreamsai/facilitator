@@ -109,6 +109,54 @@ CREATE INDEX IF NOT EXISTS idx_records_payment_verified ON resource_call_records
 CREATE INDEX IF NOT EXISTS idx_records_settlement_success ON resource_call_records((settlement->>'success')) WHERE settlement IS NOT NULL;
 `;
 
+const quoteIdentifier = (value: string): string =>
+  `"${value.replace(/"/g, "\"\"")}"`;
+
+const buildPostgresSchemaSql = (schema: string, tableName: string): string => {
+  const schemaIdent = quoteIdentifier(schema);
+  const tableIdent = quoteIdentifier(tableName);
+  const tableRef = `${schemaIdent}.${tableIdent}`;
+  const indexName = (suffix: string): string =>
+    `${schemaIdent}.${quoteIdentifier(`idx_${tableName}_${suffix}`)}`;
+
+  return `
+CREATE SCHEMA IF NOT EXISTS ${schemaIdent};
+CREATE TABLE IF NOT EXISTS ${tableRef} (
+  id UUID PRIMARY KEY,
+  method VARCHAR(10) NOT NULL,
+  path TEXT NOT NULL,
+  route_key TEXT NOT NULL,
+  url TEXT NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL,
+
+  payment_required BOOLEAN NOT NULL,
+  payment_verified BOOLEAN NOT NULL,
+  verification_error TEXT,
+
+  payment JSONB,
+  settlement JSONB,
+  upto_session JSONB,
+
+  response_status INTEGER NOT NULL DEFAULT 0,
+  response_time_ms INTEGER NOT NULL DEFAULT 0,
+  handler_executed BOOLEAN NOT NULL DEFAULT false,
+
+  request JSONB NOT NULL,
+  route_config JSONB,
+  metadata JSONB
+);
+
+-- Indexes for common queries
+CREATE INDEX IF NOT EXISTS ${indexName("timestamp")} ON ${tableRef}(timestamp DESC);
+CREATE INDEX IF NOT EXISTS ${indexName("path")} ON ${tableRef}(path);
+CREATE INDEX IF NOT EXISTS ${indexName("payment_network")} ON ${tableRef}((payment->>'network')) WHERE payment IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ${indexName("payment_scheme")} ON ${tableRef}((payment->>'scheme')) WHERE payment IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ${indexName("payment_payer")} ON ${tableRef}((payment->>'payer')) WHERE payment IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ${indexName("payment_verified")} ON ${tableRef}(payment_verified);
+CREATE INDEX IF NOT EXISTS ${indexName("settlement_success")} ON ${tableRef}((settlement->>'success')) WHERE settlement IS NOT NULL;
+`;
+};
+
 /**
  * PostgreSQL implementation of ResourceTrackingStore.
  * Uses parameterized queries for security.
@@ -398,7 +446,11 @@ export class PostgresResourceTrackingStore implements ResourceTrackingStore {
    * Call this once on startup to create table and indexes.
    */
   async initialize(): Promise<void> {
-    await this.client.query(POSTGRES_SCHEMA);
+    const schemaSql =
+      this.schema === "public" && this.tableName === "resource_call_records"
+        ? POSTGRES_SCHEMA
+        : buildPostgresSchemaSql(this.schema, this.tableName);
+    await this.client.query(schemaSql);
   }
 
   private buildWhereClause(filters?: ListFilters): {

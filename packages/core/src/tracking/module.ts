@@ -151,6 +151,11 @@ export interface ResourceTrackingModule {
    * Manually prune old records
    */
   prune(olderThan: Date): Promise<number>;
+
+  /**
+   * Stop any configured auto-prune background timer
+   */
+  stopAutoPrune(): void;
 }
 
 /**
@@ -200,22 +205,35 @@ export function createResourceTrackingModule(
     }
   };
 
+  let pruneTimer: ReturnType<typeof setInterval> | undefined;
+
   // Set up auto-pruning if configured
   if (config.autoPruneDays && config.autoPruneDays > 0) {
     const pruneIntervalMs = 24 * 60 * 60 * 1000; // Daily
     const pruneAgeDays = config.autoPruneDays;
 
-    setInterval(() => {
+    pruneTimer = setInterval(() => {
       const olderThan = new Date(Date.now() - pruneAgeDays * 24 * 60 * 60 * 1000);
       Promise.resolve(store.prune(olderThan)).catch((err) => {
         onTrackingError?.(err as Error, "auto-prune");
       });
     }, pruneIntervalMs);
+
+    const timer = pruneTimer as { unref?: () => void };
+    if (typeof timer.unref === "function") {
+      timer.unref();
+    }
   }
 
   return {
     store,
     captureHeaders,
+    stopAutoPrune() {
+      if (pruneTimer) {
+        clearInterval(pruneTimer);
+        pruneTimer = undefined;
+      }
+    },
 
     async startTracking(context: TrackingContext): Promise<string> {
       const id = generateTrackingId();
