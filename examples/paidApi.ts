@@ -33,6 +33,10 @@ import {
   RedisUptoSessionStore,
   formatSession,
 } from "@daydreamsai/facilitator/upto";
+import {
+  createResourceTrackingModule,
+  InMemoryResourceTrackingStore,
+} from "@daydreamsai/facilitator/tracking";
 import { getRpcUrl } from "@daydreamsai/facilitator/config";
 
 // ============================================================================
@@ -47,6 +51,9 @@ const REDIS_URL = process.env.REDIS_URL;
 const REDIS_PREFIX = process.env.REDIS_PREFIX ?? "facilitator:upto";
 const REDIS_SWEEPER_LOCK_KEY =
   process.env.REDIS_SWEEPER_LOCK_KEY ?? `${REDIS_PREFIX}:sweeper:lock`;
+const RESOURCE_TRACKING_AUTO_PRUNE_DAYS = Number(
+  process.env.RESOURCE_TRACKING_AUTO_PRUNE_DAYS ?? "0"
+);
 
 const evmRpcUrl = getRpcUrl("base") ?? "https://mainnet.base.org";
 const evmSigner = createPrivateKeyEvmSigner({
@@ -73,6 +80,17 @@ const sweeperLock = redis
       useOptionsStyle: false,
     })
   : undefined;
+
+const resourceTracking = createResourceTrackingModule({
+  store: new InMemoryResourceTrackingStore(),
+  ...(RESOURCE_TRACKING_AUTO_PRUNE_DAYS > 0
+    ? { autoPruneDays: RESOURCE_TRACKING_AUTO_PRUNE_DAYS }
+    : {}),
+  onTrackingError: (err, id) => {
+    // eslint-disable-next-line no-console
+    console.warn(`[resource-tracking:${id}]`, err);
+  },
+});
 
 // Create upto module for session store + manual settlement
 const upto = createUptoModule({
@@ -111,6 +129,7 @@ createElysiaPaidRoutes(app, {
     resourceServer,
     upto,
     paywallProvider,
+    resourceTracking,
     paywallConfig: {
       appName: "Paid API Example",
       testnet: true,
@@ -206,3 +225,11 @@ Endpoints:
   GET  /api/upto-session/:id - Check session status
   POST /api/upto-close       - Close and settle session
 `);
+
+const shutdown = (): void => {
+  resourceTracking.stopAutoPrune();
+  process.exit(0);
+};
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
