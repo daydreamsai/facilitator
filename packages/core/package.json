@@ -70,6 +70,10 @@
     "./auth/elysia": {
       "import": "./dist/auth/middleware/elysia.js",
       "types": "./dist/auth/middleware/elysia.d.ts"
+    },
+    "./tracking": {
+      "import": "./dist/tracking/lib.js",
+      "types": "./dist/tracking/lib.d.ts"
     }
   },
   "files": [

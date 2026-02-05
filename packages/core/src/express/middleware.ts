@@ -5,6 +5,7 @@ import {
   type PaymentState,
   type BasePaymentMiddlewareConfig,
   type PaywallConfig,
+  type ResourceTrackingModule,
   DEFAULT_PAYMENT_HEADER_ALIASES,
   isUptoModule,
   normalizePathCandidate,
@@ -21,7 +22,10 @@ import {
 // Types
 // -----------------------------------------------------------------------------
 
-export interface ExpressPaymentState extends PaymentState {}
+export interface ExpressPaymentState extends PaymentState {
+  /** Request start time for response time calculation */
+  __startTimeMs?: number;
+}
 
 export interface ExpressPaymentMiddlewareConfig extends BasePaymentMiddlewareConfig {
   paywallConfig?:
@@ -81,6 +85,7 @@ export function createExpressPaymentMiddleware(
     config.paymentHeaderAliases ?? DEFAULT_PAYMENT_HEADER_ALIASES;
   const autoSettle = config.autoSettle ?? true;
   const uptoModule = config.upto;
+  const resourceTracking = config.resourceTracking;
 
   if (config.upto !== undefined && !isUptoModule(config.upto)) {
     throw new Error("Upto middleware requires an upto module.");
@@ -95,6 +100,8 @@ export function createExpressPaymentMiddleware(
   let initialized = false;
 
   return async (req: Request, res: Response, next: NextFunction) => {
+    const startTimeMs = Date.now();
+
     try {
       if (!initialized) {
         await httpServer.initialize();
@@ -112,11 +119,29 @@ export function createExpressPaymentMiddleware(
         paywallConfig,
         uptoModule,
         autoTrack,
+        resourceTracking,
       });
 
-      req.x402 = result.state;
+      req.x402 = { ...result.state, __startTimeMs: startTimeMs };
+
+      const finalizeEarly = async (status: number) => {
+        const afterResult = await processAfterHandle({
+          httpServer,
+          state: req.x402,
+          autoSettle,
+          resourceTracking,
+          responseStatus: status,
+          startTimeMs: req.x402?.__startTimeMs,
+          handlerExecuted: false,
+        });
+
+        for (const [key, value] of Object.entries(afterResult.headers)) {
+          res.setHeader(key, value);
+        }
+      };
 
       if (result.action === "error") {
+        await finalizeEarly(result.status);
         for (const [key, value] of Object.entries(result.headers)) {
           res.setHeader(key, value);
         }
@@ -130,6 +155,7 @@ export function createExpressPaymentMiddleware(
       }
 
       if (result.action === "tracking-error") {
+        await finalizeEarly(result.status);
         res.status(result.status).json(result.body);
         return;
       }
@@ -146,6 +172,9 @@ export function createExpressPaymentMiddleware(
           httpServer,
           state: req.x402,
           autoSettle,
+          resourceTracking,
+          responseStatus: res.statusCode,
+          startTimeMs: req.x402?.__startTimeMs,
         });
 
         for (const [key, value] of Object.entries(afterResult.headers)) {

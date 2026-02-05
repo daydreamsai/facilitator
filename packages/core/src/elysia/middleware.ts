@@ -6,6 +6,7 @@ import {
   type BasePaymentMiddlewareConfig,
   type PaywallConfig,
   type UptoModule,
+  type ResourceTrackingModule,
   DEFAULT_PAYMENT_HEADER_ALIASES,
   isUptoModule,
   normalizePathCandidate,
@@ -23,7 +24,10 @@ import {
 // Types
 // -----------------------------------------------------------------------------
 
-export interface ElysiaPaymentState extends PaymentState {}
+export interface ElysiaPaymentState extends PaymentState {
+  /** Request start time for response time calculation */
+  __startTimeMs?: number;
+}
 
 export type ElysiaPaymentMiddlewareConfig = BasePaymentMiddlewareConfig & {
   scope?: "local" | "scoped" | "global";
@@ -111,6 +115,7 @@ export function createElysiaPaymentMiddleware(
   const scope = config.scope ?? "scoped";
   const pluginName = config.pluginName ?? DEFAULT_PLUGIN_NAME;
   const uptoModule = config.upto;
+  const resourceTracking = config.resourceTracking;
 
   if (config.upto !== undefined && !isUptoModule(config.upto)) {
     throw new Error("Upto middleware requires an upto module.");
@@ -139,6 +144,7 @@ export function createElysiaPaymentMiddleware(
   }
 
   app.onBeforeHandle({ as: scope }, async (ctx) => {
+    const startTimeMs = Date.now();
     const server = getHttpServer();
     const adapter = createAdapter(ctx, paymentHeaderAliases);
     const paywallConfig = await resolvePaywallConfig(config.paywallConfig, ctx);
@@ -149,30 +155,59 @@ export function createElysiaPaymentMiddleware(
       paywallConfig,
       uptoModule,
       autoTrack,
+      resourceTracking,
     });
 
-    ctx.x402 = result.state;
+    ctx.x402 = { ...result.state, __startTimeMs: startTimeMs };
 
     if (result.action === "error") {
+      const afterResult = await processAfterHandle({
+        httpServer: server,
+        state: ctx.x402,
+        autoSettle,
+        resourceTracking,
+        responseStatus: result.status,
+        startTimeMs: ctx.x402?.__startTimeMs,
+        handlerExecuted: false,
+      });
       if (result.isHtml) {
         return new Response(result.body as string, {
           status: result.status,
           headers: {
             ...result.headers,
+            ...afterResult.headers,
             "content-type": "text/html; charset=utf-8",
           },
         });
       }
       ctx.set.status = result.status;
-      ctx.set.headers = mergeHeaders(ctx.set.headers, result.headers);
+      ctx.set.headers = mergeHeaders(
+        ctx.set.headers,
+        mergeHeaders(result.headers, afterResult.headers)
+      );
       return result.body;
     }
 
     if (result.action === "tracking-error") {
-      ctx.set.status = result.status;
-      ctx.set.headers = mergeHeaders(ctx.set.headers, {
-        "content-type": "application/json",
+      const afterResult = await processAfterHandle({
+        httpServer: server,
+        state: ctx.x402,
+        autoSettle,
+        resourceTracking,
+        responseStatus: result.status,
+        startTimeMs: ctx.x402?.__startTimeMs,
+        handlerExecuted: false,
       });
+      ctx.set.status = result.status;
+      ctx.set.headers = mergeHeaders(
+        ctx.set.headers,
+        mergeHeaders(
+          {
+            "content-type": "application/json",
+          },
+          afterResult.headers
+        )
+      );
       return result.body;
     }
   });
@@ -183,6 +218,9 @@ export function createElysiaPaymentMiddleware(
       httpServer: server,
       state: ctx.x402,
       autoSettle,
+      resourceTracking,
+      responseStatus: typeof ctx.set.status === "number" ? ctx.set.status : 200,
+      startTimeMs: ctx.x402?.__startTimeMs,
     });
 
     if (Object.keys(afterResult.headers).length > 0) {
