@@ -96,6 +96,10 @@ const pgPool = RESOURCE_TRACKING_DATABASE_URL
   ? new Pool({ connectionString: RESOURCE_TRACKING_DATABASE_URL })
   : undefined;
 
+// Drizzle users can reuse the same Pool instance:
+// import { drizzle } from "drizzle-orm/node-postgres";
+// const db = drizzle(pgPool);
+
 const pgClient: PostgresClientAdapter | undefined = pgPool
   ? {
       query: async (sql, params) => {

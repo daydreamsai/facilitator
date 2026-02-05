@@ -173,6 +173,33 @@ app.use(
 );
 ```
 
+### Drizzle Adapter (node-postgres)
+
+If you're using Drizzle with `pg`, you can reuse the same pool and adapt it to
+the tracking store:
+
+```typescript
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import type { PostgresClientAdapter } from "@daydreamsai/facilitator/tracking";
+import { PostgresResourceTrackingStore } from "@daydreamsai/facilitator/tracking";
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = drizzle(pool);
+
+const adapter: PostgresClientAdapter = {
+  query: async (sql, params) => (await pool.query(sql, params)).rows,
+  queryOne: async (sql, params) => (await pool.query(sql, params)).rows[0],
+  queryScalar: async (sql, params) => {
+    const row = (await pool.query(sql, params)).rows[0];
+    return row ? Object.values(row)[0] : undefined;
+  },
+};
+
+const store = new PostgresResourceTrackingStore(adapter);
+await store.initialize();
+```
+
 ### Querying Data
 
 ```typescript
