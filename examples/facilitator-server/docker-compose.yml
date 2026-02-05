@@ -1,14 +1,34 @@
 version: "3.8"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: facilitator
+      POSTGRES_USER: facilitator
+      POSTGRES_PASSWORD: facilitator
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U facilitator"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   facilitator:
     build:
       context: ../..
       dockerfile: Dockerfile
     ports:
       - "8090:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       - PORT=8090
+      - DATABASE_URL=postgresql://facilitator:facilitator@postgres:5432/facilitator
       # EVM Signer (required - use one of CDP or private key)
       # For CDP (recommended):
       # - CDP_API_KEY_ID=${CDP_API_KEY_ID}
@@ -36,3 +56,6 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  pgdata:

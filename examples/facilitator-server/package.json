@@ -12,12 +12,13 @@
     "start": "node dist/index.js",
     "dev": "bun run src/index.ts",
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@bogeychan/elysia-logger": "^0.1.10",
     "@coinbase/cdp-sdk": "^1.40.1",
-    "@daydreamsai/facilitator": "latest",
+    "@daydreamsai/facilitator": "workspace:*",
     "@elysiajs/node": "^1.0.0",
     "@elysiajs/opentelemetry": "^1.4.9",
     "@elysiajs/static": "^1.4.7",
@@ -25,9 +26,12 @@
     "@opentelemetry/sdk-trace-node": "^2.2.0",
     "@x402/core": "^2.0.0",
     "dotenv": "^16.4.5",
-    "elysia": "^1.0.0"
+    "drizzle-orm": "^0.44.0",
+    "elysia": "^1.0.0",
+    "pg": "^8.11.5"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.0",
     "typescript": "^5.7.2"
   },
   "engines": {

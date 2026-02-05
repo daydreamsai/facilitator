@@ -12,12 +12,11 @@ import type {
 } from "@x402/core/types";
 
 import { logger } from "@bogeychan/elysia-logger";
-import { defaultSigners } from "./setup";
-import { createFacilitator } from "@daydreamsai/facilitator";
-
-const facilitator = createFacilitator({
-  ...defaultSigners,
-});
+import {
+  extractPaymentDetails,
+  type ResourceTrackingModule,
+  type TrackingContext,
+} from "@daydreamsai/facilitator/tracking";
 
 function normalizeSupportedVersions(supported: {
   kinds: Array<{ x402Version: number; network: string }>;
@@ -32,122 +31,372 @@ function normalizeSupportedVersions(supported: {
   return supported;
 }
 
-// Elysia app (Node adapter for Node.js runtime)
-export const app = new Elysia({ adapter: node() })
-  .use(
-    logger({
-      autoLogging: true,
-      level: "info",
-    })
-  )
-  .use(
-    opentelemetry({
-      serviceName: process.env.OTEL_SERVICE_NAME ?? "x402-facilitator",
-      spanProcessors: [new BatchSpanProcessor(new OTLPTraceExporter())],
-    })
-  )
-  .get("/", () => file("./public/index.html"))
-  .use(staticPlugin())
-  /**
-   * POST /verify
-   * Verify a payment against requirements
-   *
-   * Note: Payment tracking and bazaar discovery are handled by lifecycle hooks
-   */
-  .post("/verify", async ({ body, status }) => {
-    try {
-      const { paymentPayload, paymentRequirements } = body as {
-        paymentPayload?: PaymentPayload;
-        paymentRequirements?: PaymentRequirements;
-      };
-
-      if (!paymentPayload || !paymentRequirements) {
-        return status(400, {
-          error: "Missing paymentPayload or paymentRequirements",
-        });
-      }
-
-      // Hooks will automatically:
-      // - Track verified payment (onAfterVerify)
-      // - Extract and catalog discovery info (onAfterVerify)
-      const response: VerifyResponse = await facilitator.verify(
-        paymentPayload,
-        paymentRequirements
-      );
-
-      return response;
-    } catch (error) {
-      console.error("Verify error:", error);
-      return status(500, {
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
+function toQueryParams(url: URL): Record<string, string | string[]> {
+  const queryParams: Record<string, string | string[]> = {};
+  for (const [key, value] of url.searchParams.entries()) {
+    const existing = queryParams[key];
+    if (existing === undefined) {
+      queryParams[key] = value;
+      continue;
     }
-  })
-  /**
-   * POST /settle
-   * Settle a payment on-chain
-   *
-   * Note: Verification validation and cleanup are handled by lifecycle hooks
-   */
-  .post("/settle", async ({ body, status }) => {
+    queryParams[key] = Array.isArray(existing)
+      ? [...existing, value]
+      : [existing, value];
+  }
+  return queryParams;
+}
+
+function buildTrackingContext(
+  request: Request,
+  fallbackPath: string,
+  paymentRequired = false
+): TrackingContext {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(request.url);
+  } catch {
+    parsedUrl = new URL(`http://localhost${fallbackPath}`);
+  }
+  const headers = Object.fromEntries(request.headers.entries());
+  const contentLengthRaw = request.headers.get("content-length");
+  const contentLength = contentLengthRaw
+    ? parseInt(contentLengthRaw, 10)
+    : undefined;
+  const clientIp =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip") ??
+    undefined;
+
+  return {
+    method: request.method || "POST",
+    path: parsedUrl.pathname || fallbackPath,
+    url: request.url || parsedUrl.toString(),
+    paymentRequired,
+    request: {
+      clientIp,
+      userAgent: request.headers.get("user-agent") ?? undefined,
+      headers,
+      queryParams: toQueryParams(parsedUrl),
+      contentType: request.headers.get("content-type") ?? undefined,
+      contentLength: Number.isNaN(contentLength) ? undefined : contentLength,
+      acceptHeader: request.headers.get("accept") ?? undefined,
+    },
+  };
+}
+
+interface Facilitator {
+  verify(
+    payload: PaymentPayload,
+    requirements: PaymentRequirements
+  ): Promise<VerifyResponse>;
+  settle(
+    payload: PaymentPayload,
+    requirements: PaymentRequirements
+  ): Promise<SettleResponse>;
+  getSupported(): {
+    kinds: Array<{ x402Version: number; network: string }>;
+    extensions: unknown[];
+    signers: Record<string, string[]>;
+  };
+}
+
+export interface AppConfig {
+  facilitator: Facilitator;
+  tracking?: ResourceTrackingModule;
+}
+
+export function createApp(config: AppConfig) {
+  const { facilitator, tracking } = config;
+  const safeTrack = async (
+    fn: (module: ResourceTrackingModule) => Promise<void>,
+    label = "tracking"
+  ): Promise<void> => {
+    if (!tracking) return;
     try {
-      const { paymentPayload, paymentRequirements } = body as {
-        paymentPayload?: PaymentPayload;
-        paymentRequirements?: PaymentRequirements;
-      };
+      await fn(tracking);
+    } catch (err) {
+      console.warn(`[${label}]`, err);
+    }
+  };
 
-      if (!paymentPayload || !paymentRequirements) {
-        return status(400, {
-          error: "Missing paymentPayload or paymentRequirements",
-        });
-      }
+  const safeStartTracking = async (
+    context: TrackingContext
+  ): Promise<string | undefined> => {
+    if (!tracking) return undefined;
+    try {
+      return await tracking.startTracking(context);
+    } catch (err) {
+      console.warn("[tracking:start]", err);
+      return undefined;
+    }
+  };
 
-      // Hooks will automatically:
-      // - Validate payment was verified (onBeforeSettle - will abort if not)
-      // - Check verification timeout (onBeforeSettle)
-      // - Clean up tracking (onAfterSettle / onSettleFailure)
-      const response: SettleResponse = await facilitator.settle(
-        paymentPayload,
-        paymentRequirements
+  const app = new Elysia({ adapter: node() })
+    .use(
+      logger({
+        autoLogging: true,
+        level: "info",
+      })
+    )
+    .use(
+      opentelemetry({
+        serviceName: process.env.OTEL_SERVICE_NAME ?? "x402-facilitator",
+        spanProcessors: [new BatchSpanProcessor(new OTLPTraceExporter())],
+      })
+    )
+    .get("/", () => file("./public/index.html"))
+    .use(staticPlugin())
+    .post("/verify", async ({ body, request, status }) => {
+      const startMs = Date.now();
+      const trackingId = await safeStartTracking(
+        buildTrackingContext(request, "/verify")
       );
 
-      return response;
-    } catch (error) {
-      console.error("Settle error:", error);
-
-      // Check if this was an abort from hook
-      if (
-        error instanceof Error &&
-        error.message.includes("Settlement aborted:")
-      ) {
-        // Return a proper SettleResponse instead of 500 error
-        const { paymentPayload } = body as {
+      try {
+        const { paymentPayload, paymentRequirements } = body as {
           paymentPayload?: PaymentPayload;
+          paymentRequirements?: PaymentRequirements;
         };
 
-        return {
-          success: false,
-          errorReason: error.message.replace("Settlement aborted: ", ""),
-          network: paymentPayload?.accepted?.network || "unknown",
-        } as SettleResponse;
-      }
+        if (!paymentPayload || !paymentRequirements) {
+          if (trackingId) {
+            await safeTrack(
+              (module) =>
+                module.finalizeTracking(
+                  trackingId,
+                  400,
+                  Date.now() - startMs,
+                  false
+                ),
+              `tracking:${trackingId}`
+            );
+          }
+          return status(400, {
+            error: "Missing paymentPayload or paymentRequirements",
+          });
+        }
 
-      return status(500, {
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  })
-  /**
-   * GET /supported
-   * Get supported payment kinds and extensions
-   */
-  .get("/supported", ({ status }) => {
-    try {
-      return normalizeSupportedVersions(facilitator.getSupported());
-    } catch (error) {
-      console.error("Supported error:", error);
-      return status(500, {
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  });
+        const response: VerifyResponse = await facilitator.verify(
+          paymentPayload,
+          paymentRequirements
+        );
+
+        if (trackingId) {
+          await safeTrack(
+            (module) =>
+              module.recordVerification(
+                trackingId,
+                true,
+                extractPaymentDetails(paymentPayload, paymentRequirements)
+              ),
+            `tracking:${trackingId}`
+          );
+          await safeTrack(
+            (module) =>
+              module.finalizeTracking(
+                trackingId,
+                200,
+                Date.now() - startMs,
+                true
+              ),
+            `tracking:${trackingId}`
+          );
+        }
+
+        return response;
+      } catch (error) {
+        console.error("Verify error:", error);
+        if (trackingId) {
+          await safeTrack(
+            (module) =>
+              module.recordVerification(
+                trackingId,
+                false,
+                undefined,
+                error instanceof Error ? error.message : "Unknown error"
+              ),
+            `tracking:${trackingId}`
+          );
+          await safeTrack(
+            (module) =>
+              module.finalizeTracking(
+                trackingId,
+                500,
+                Date.now() - startMs,
+                false
+              ),
+            `tracking:${trackingId}`
+          );
+        }
+        return status(500, {
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    })
+    .post("/settle", async ({ body, request, status }) => {
+      const startMs = Date.now();
+      const trackingId = await safeStartTracking(
+        buildTrackingContext(request, "/settle")
+      );
+
+      try {
+        const { paymentPayload, paymentRequirements } = body as {
+          paymentPayload?: PaymentPayload;
+          paymentRequirements?: PaymentRequirements;
+        };
+
+        if (!paymentPayload || !paymentRequirements) {
+          if (trackingId) {
+            await safeTrack(
+              (module) =>
+                module.finalizeTracking(
+                  trackingId,
+                  400,
+                  Date.now() - startMs,
+                  false
+                ),
+              `tracking:${trackingId}`
+            );
+          }
+          return status(400, {
+            error: "Missing paymentPayload or paymentRequirements",
+          });
+        }
+
+        if (trackingId) {
+          await safeTrack(
+            (module) =>
+              module.recordVerification(
+                trackingId,
+                true,
+                extractPaymentDetails(paymentPayload, paymentRequirements)
+              ),
+            `tracking:${trackingId}`
+          );
+        }
+
+        const response: SettleResponse = await facilitator.settle(
+          paymentPayload,
+          paymentRequirements
+        );
+
+        if (trackingId) {
+          await safeTrack(
+            (module) =>
+              module.recordSettlement(trackingId, {
+                attempted: true,
+                success: response.success,
+                transactionHash: response.transaction,
+                errorMessage: response.errorReason,
+                settledAtMs: Date.now(),
+              }),
+            `tracking:${trackingId}`
+          );
+          await safeTrack(
+            (module) =>
+              module.finalizeTracking(
+                trackingId,
+                200,
+                Date.now() - startMs,
+                true
+              ),
+            `tracking:${trackingId}`
+          );
+        }
+
+        return response;
+      } catch (error) {
+        console.error("Settle error:", error);
+
+        if (
+          error instanceof Error &&
+          error.message.includes("Settlement aborted:")
+        ) {
+          const { paymentPayload, paymentRequirements } = body as {
+            paymentPayload?: PaymentPayload;
+            paymentRequirements?: PaymentRequirements;
+          };
+
+          if (trackingId) {
+            if (paymentPayload && paymentRequirements) {
+              await safeTrack(
+                (module) =>
+                  module.recordVerification(
+                    trackingId,
+                    false,
+                    extractPaymentDetails(paymentPayload, paymentRequirements),
+                    error.message
+                  ),
+                `tracking:${trackingId}`
+              );
+            }
+            await safeTrack(
+              (module) =>
+                module.recordSettlement(trackingId, {
+                  attempted: true,
+                  success: false,
+                  errorMessage: error.message,
+                  settledAtMs: Date.now(),
+                }),
+              `tracking:${trackingId}`
+            );
+            await safeTrack(
+              (module) =>
+                module.finalizeTracking(
+                  trackingId,
+                  200,
+                  Date.now() - startMs,
+                  false
+                ),
+              `tracking:${trackingId}`
+            );
+          }
+
+          return {
+            success: false,
+            errorReason: error.message.replace("Settlement aborted: ", ""),
+            network: paymentPayload?.accepted?.network || "unknown",
+          } as SettleResponse;
+        }
+
+        if (trackingId) {
+          await safeTrack(
+            (module) =>
+              module.recordSettlement(trackingId, {
+                attempted: true,
+                success: false,
+                errorMessage:
+                  error instanceof Error ? error.message : "Unknown error",
+                settledAtMs: Date.now(),
+              }),
+            `tracking:${trackingId}`
+          );
+          await safeTrack(
+            (module) =>
+              module.finalizeTracking(
+                trackingId,
+                500,
+                Date.now() - startMs,
+                false
+              ),
+            `tracking:${trackingId}`
+          );
+        }
+        return status(500, {
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    })
+    .get("/supported", ({ status }) => {
+      try {
+        return normalizeSupportedVersions(facilitator.getSupported());
+      } catch (error) {
+        console.error("Supported error:", error);
+        return status(500, {
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    });
+
+  return app;
+}
