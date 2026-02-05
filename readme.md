@@ -25,6 +25,7 @@ A production-ready payment settlement service for the [x402 protocol](https://gi
   - [Payment Flow Example](#payment-flow-example)
   - [Recommended Integration Pattern](#recommended-integration-pattern)
   - [State Persistence Considerations](#state-persistence-considerations)
+- [Resource Tracking](#resource-tracking)
 - [Resource Server](#resource-server)
 - [Framework Middleware](#framework-middleware)
   - [Elysia](#elysia)
@@ -124,6 +125,66 @@ Client → POST /verify → Permit validation → Session created/updated
          Accumulate pending spend across requests
               ↓
          Sweeper triggers → POST /settle (batch) → Reset pending
+```
+
+## Resource Tracking
+
+Resource tracking is an optional module that records request, verification, and settlement metadata for analytics and auditing. It plugs into the framework middleware and follows the payment lifecycle end-to-end.
+
+### How It Works
+
+1. **Start**: `startTracking()` runs at request start and captures request metadata (headers, IP, user agent, etc.).
+2. **Update**: `recordRequest()` updates `paymentRequired` and attaches route config after `processHTTPRequest`.
+3. **Verify**: `recordVerification()` records payment verification success/failure and payment details.
+4. **Track Upto**: `recordUptoSession()` stores Upto session metadata when used.
+5. **Settle**: `recordSettlement()` records settlement attempt and result for exact payments.
+6. **Finalize**: `finalizeTracking()` runs on response end (including 402 errors). For early exits, `handlerExecuted` is set to `false`.
+
+Tracking is **best effort** by default. If `asyncTracking` is enabled (default), tracking errors are captured via `onTrackingError` and never block requests.
+
+### Usage
+
+```typescript
+import {
+  createResourceTrackingModule,
+  InMemoryResourceTrackingStore,
+  PostgresResourceTrackingStore,
+} from "@daydreamsai/facilitator/tracking";
+import { createElysiaPaymentMiddleware } from "@daydreamsai/facilitator/elysia";
+
+// Development: in-memory store
+const tracking = createResourceTrackingModule({
+  store: new InMemoryResourceTrackingStore(),
+  captureHeaders: ["x-request-id"],
+});
+
+// Production: Postgres store
+// const tracking = createResourceTrackingModule({
+//   store: new PostgresResourceTrackingStore(pgClient),
+//   asyncTracking: true,
+//   onTrackingError: (err, id) => console.error(`tracking error ${id}`, err),
+// });
+
+app.use(
+  createElysiaPaymentMiddleware({
+    httpServer,
+    resourceTracking: tracking,
+  })
+);
+```
+
+### Querying Data
+
+```typescript
+const recent = await tracking.list({
+  filters: { paymentVerified: true },
+  limit: 50,
+});
+
+const stats = await tracking.getStats(
+  new Date(Date.now() - 24 * 60 * 60 * 1000),
+  new Date()
+);
 ```
 
 ## Quick Start
