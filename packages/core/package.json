@@ -70,6 +70,14 @@
     "./auth/elysia": {
       "import": "./dist/auth/middleware/elysia.js",
       "types": "./dist/auth/middleware/elysia.d.ts"
+    },
+    "./token-gate": {
+      "import": "./dist/token-gate/index.js",
+      "types": "./dist/token-gate/index.d.ts"
+    },
+    "./token-gate/cache/redis": {
+      "import": "./dist/token-gate/cache/redis.js",
+      "types": "./dist/token-gate/cache/redis.d.ts"
     }
   },
   "files": [
@@ -78,14 +86,16 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && bun ./scripts/verify-exports.ts",
     "prepublishOnly": "npm run build",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.test.json",
     "test": "bun test",
     "test:watch": "bun test --watch",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage",
+    "verify:exports": "bun ./scripts/verify-exports.ts"
   },
   "keywords": [
     "x402",
