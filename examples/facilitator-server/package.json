@@ -13,7 +13,12 @@
     "dev": "bun run src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "db:generate": "bunx drizzle-kit generate",
+    "db:migrate": "bun run src/migrate.ts",
+    "db:push": "bunx drizzle-kit push",
+    "db:studio": "bunx drizzle-kit studio",
+    "db:check": "bunx drizzle-kit check"
   },
   "dependencies": {
     "@bogeychan/elysia-logger": "^0.1.10",
@@ -32,6 +37,7 @@
   },
   "devDependencies": {
     "@types/pg": "^8.11.0",
+    "drizzle-kit": "^0.31.0",
     "typescript": "^5.7.2"
   },
   "engines": {

@@ -19,7 +19,7 @@ import { defaultSigners } from "./setup.js";
 import { createFacilitator } from "@daydreamsai/facilitator";
 import { createApp } from "./app.js";
 import { createDrizzleAdapter, createTracking } from "./db.js";
-import { PostgresResourceTrackingStore } from "@daydreamsai/facilitator/tracking";
+import { runMigrations } from "./db-migrate.js";
 import * as trackingSchema from "./schema/tracking.js";
 
 const PORT = parseInt(process.env.PORT || "8090", 10);
@@ -34,11 +34,13 @@ const db = pool
   : undefined;
 const pgClient = pool ? createDrizzleAdapter(pool) : undefined;
 
+// Run migrations if database is configured
+if (pool) {
+  await runMigrations(pool);
+}
+
 // Resource tracking (falls back to in-memory if no DATABASE_URL)
 const tracking = createTracking(pgClient);
-if (tracking.store instanceof PostgresResourceTrackingStore) {
-  await (tracking.store as PostgresResourceTrackingStore).initialize();
-}
 
 // Facilitator + App
 const facilitator = createFacilitator({ ...defaultSigners });

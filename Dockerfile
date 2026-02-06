@@ -29,6 +29,7 @@ COPY --from=builder /app/packages/core/package.json packages/core/
 COPY --from=builder /app/examples/facilitator-server/dist examples/facilitator-server/dist
 COPY --from=builder /app/examples/facilitator-server/package.json examples/facilitator-server/
 COPY --from=builder /app/examples/facilitator-server/public examples/facilitator-server/public
+COPY --from=builder /app/examples/facilitator-server/drizzle examples/facilitator-server/drizzle
 
 WORKDIR /app/examples/facilitator-server
 
