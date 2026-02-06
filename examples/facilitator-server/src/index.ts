@@ -26,17 +26,26 @@ const PORT = parseInt(process.env.PORT || "8090", 10);
 const DATABASE_URL = process.env.DATABASE_URL;
 
 // Database setup (optional)
-const pool = DATABASE_URL
+let pool = DATABASE_URL
   ? new pg.Pool({ connectionString: DATABASE_URL })
   : undefined;
-const db = pool
+let db = pool
   ? drizzle(pool, { schema: trackingSchema })
   : undefined;
-const pgClient = pool ? createDrizzleAdapter(pool) : undefined;
+let pgClient = pool ? createDrizzleAdapter(pool) : undefined;
 
 // Run migrations if database is configured
 if (pool) {
-  await runMigrations(pool);
+  try {
+    await runMigrations(pool);
+  } catch (err) {
+    console.error(`❌ Database migration failed - falling back to in-memory tracking`);
+    console.error(err instanceof Error ? err.message : err);
+    await pool.end().catch(() => {});
+    pool = undefined;
+    db = undefined;
+    pgClient = undefined;
+  }
 }
 
 // Resource tracking (falls back to in-memory if no DATABASE_URL)

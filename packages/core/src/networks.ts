@@ -277,6 +277,11 @@ export const SVM_NETWORKS = {
   },
 } as const satisfies Record<string, SvmNetworkConfig>;
 
+/** Common shorthand aliases for SVM networks */
+const SVM_ALIASES: Record<string, string> = {
+  solana: "solana-mainnet",
+};
+
 // ============================================================================
 // EVM Helpers
 // ============================================================================
@@ -536,8 +541,9 @@ export function resolveSvmRpcUrl(
 export function validateSvmNetworks(networks: string[]): string[] {
   const valid: string[] = [];
   for (const name of networks) {
-    if (getSvmNetwork(name)) {
-      valid.push(name);
+    const resolved = SVM_ALIASES[name] ?? name;
+    if (getSvmNetwork(resolved)) {
+      valid.push(resolved);
     } else {
       console.warn(`⚠️  Unknown SVM network "${name}" - skipping`);
     }
