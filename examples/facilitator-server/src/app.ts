@@ -100,13 +100,16 @@ interface Facilitator {
   };
 }
 
+export type AppModule = unknown;
+
 export interface AppConfig {
   facilitator: Facilitator;
   tracking?: ResourceTrackingModule;
+  modules?: AppModule[];
 }
 
 export function createApp(config: AppConfig) {
-  const { facilitator, tracking } = config;
+  const { facilitator, tracking, modules = [] } = config;
   const safeTrack = async (
     fn: (module: ResourceTrackingModule) => Promise<void>,
     label = "tracking"
@@ -131,7 +134,7 @@ export function createApp(config: AppConfig) {
     }
   };
 
-  const app = new Elysia({ adapter: node() })
+  const baseApp = new Elysia({ adapter: node() })
     .use(
       logger({
         autoLogging: true,
@@ -143,7 +146,13 @@ export function createApp(config: AppConfig) {
         serviceName: process.env.OTEL_SERVICE_NAME ?? "x402-facilitator",
         spanProcessors: [new BatchSpanProcessor(new OTLPTraceExporter())],
       })
-    )
+    );
+
+  for (const module of modules) {
+    baseApp.use(module as any);
+  }
+
+  const app = baseApp
     .get("/", () => file("./public/index.html"))
     .use(staticPlugin())
     .post("/verify", async ({ body, request, status }) => {

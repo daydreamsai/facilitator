@@ -11,6 +11,8 @@
  * - CDP_API_KEY_ID, CDP_API_KEY_SECRET, CDP_WALLET_SECRET: For CDP signer
  * - EVM_PRIVATE_KEY, SVM_PRIVATE_KEY: For private key signer (fallback)
  * - EVM_RPC_URL_BASE, EVM_RPC_URL_BASE_SEPOLIA: RPC URLs
+ * - BEARER_TOKEN: Required bearer token for /verify and /settle
+ * - BEARER_TOKENS: Optional comma-separated bearer token list (overrides BEARER_TOKEN)
  */
 
 import pg from "pg";
@@ -20,10 +22,26 @@ import { createFacilitator } from "@daydreamsai/facilitator";
 import { createApp } from "./app.js";
 import { createDrizzleAdapter, createTracking } from "./db.js";
 import { runMigrations } from "./db-migrate.js";
+import { createBearerTokenModule } from "./modules/bearer-token.js";
 import * as trackingSchema from "./schema/tracking.js";
 
 const PORT = parseInt(process.env.PORT || "8090", 10);
 const DATABASE_URL = process.env.DATABASE_URL;
+const BEARER_TOKEN = process.env.BEARER_TOKEN?.trim();
+const BEARER_TOKENS = process.env.BEARER_TOKENS?.split(",")
+  .map((token) => token.trim())
+  .filter(Boolean);
+const TOKENS = BEARER_TOKENS && BEARER_TOKENS.length > 0
+  ? BEARER_TOKENS
+  : BEARER_TOKEN
+    ? [BEARER_TOKEN]
+    : [];
+
+if (TOKENS.length === 0) {
+  throw new Error(
+    "Set BEARER_TOKEN or BEARER_TOKENS to require bearer auth for facilitator startup."
+  );
+}
 
 // Database setup (optional)
 let pool = DATABASE_URL
@@ -53,7 +71,17 @@ const tracking = createTracking(pgClient);
 
 // Facilitator + App
 const facilitator = createFacilitator({ ...defaultSigners });
-const app = createApp({ facilitator, tracking });
+const app = createApp({
+  facilitator,
+  tracking,
+  modules: [
+    createBearerTokenModule({
+      tokens: TOKENS,
+      protectedPaths: ["/verify", "/settle"],
+      realm: "facilitator",
+    }),
+  ],
+});
 
 app.listen(PORT);
 console.log(`x402 Facilitator listening on http://localhost:${PORT}`);
