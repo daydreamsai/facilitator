@@ -93,12 +93,34 @@ jobs:
         # Uses well-known test private key (0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf)
         # This is intentionally a publicly known key for CI testing - never use with real funds
         run: |
+          set -euo pipefail
+
+          cleanup() {
+            docker stop test-facilitator >/dev/null 2>&1 || true
+            docker rm test-facilitator >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
           docker run -d --name test-facilitator \
             -e EVM_PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000001 \
             -e EVM_NETWORKS=base-sepolia \
+            -e BEARER_TOKEN=ci-test-token \
             -p 8090:8090 \
             facilitator:test
-          sleep 5
-          curl -f http://localhost:8090/supported || exit 1
-          docker stop test-facilitator
-          docker rm test-facilitator
+
+          ready="false"
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8090/supported >/dev/null; then
+              ready="true"
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$ready" != "true" ]; then
+            echo "Container did not become ready. Dumping logs:"
+            docker logs test-facilitator || true
+            exit 1
+          fi
+
+          curl -fsS http://localhost:8090/supported >/dev/null
