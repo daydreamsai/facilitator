@@ -11,8 +11,15 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+export function buildMigrationConfig(migrationsFolder: string) {
+  return {
+    migrationsFolder,
+    migrationsSchema: "public" as const,
+  };
+}
+
 export async function runMigrations(pool: Pool): Promise<void> {
   const db = drizzle(pool);
   const migrationsFolder = resolve(__dirname, "../drizzle");
-  await migrate(db, { migrationsFolder });
+  await migrate(db, buildMigrationConfig(migrationsFolder));
 }

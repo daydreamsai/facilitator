@@ -11,12 +11,7 @@
 
 import "dotenv/config";
 import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { runMigrations } from "./db-migrate.js";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -26,10 +21,9 @@ if (!DATABASE_URL) {
 }
 
 const pool = new pg.Pool({ connectionString: DATABASE_URL });
-const db = drizzle(pool);
 
 console.log("Running migrations...");
-await migrate(db, { migrationsFolder: resolve(__dirname, "../drizzle") });
+await runMigrations(pool);
 console.log("Migrations complete.");
 
 await pool.end();
