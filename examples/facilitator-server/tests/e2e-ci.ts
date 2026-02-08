@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { Pool } from "pg";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveE2ePrivateKey } from "./e2e-env.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const testsDir = resolve(__filename, "..");
@@ -76,6 +77,12 @@ async function run(): Promise<void> {
   const baseUrl = `http://127.0.0.1:${PORT}`;
   const pool = new Pool({ connectionString: DATABASE_URL });
   let failed = false;
+  const privateKey = resolveE2ePrivateKey(process.env.EVM_PRIVATE_KEY);
+  if (process.env.EVM_PRIVATE_KEY && privateKey !== process.env.EVM_PRIVATE_KEY) {
+    console.warn(
+      "EVM_PRIVATE_KEY for e2e was malformed; using normalized fallback key."
+    );
+  }
 
   const server = Bun.spawn({
     cmd: ["node", "dist/index.js"],
@@ -86,10 +93,7 @@ async function run(): Promise<void> {
       DATABASE_URL,
       TRACKING_ALLOW_IN_MEMORY_FALLBACK: "false",
       OTEL_SDK_DISABLED: "true",
-      // Well-known test key, same as existing Docker CI smoke test.
-      EVM_PRIVATE_KEY:
-        process.env.EVM_PRIVATE_KEY ??
-        "0x0000000000000000000000000000000000000000000000000000000000000001",
+      EVM_PRIVATE_KEY: privateKey,
       EVM_NETWORKS: process.env.EVM_NETWORKS ?? "base-sepolia",
     },
     stdout: "pipe",
