@@ -10,6 +10,7 @@ const serverDir = resolve(testsDir, "..");
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const PORT = Number(process.env.PORT ?? "18090");
+const BEARER_TOKEN = process.env.BEARER_TOKEN ?? "e2e-test-token";
 
 if (!DATABASE_URL) {
   throw new Error("DATABASE_URL is required for e2e test");
@@ -93,6 +94,7 @@ async function run(): Promise<void> {
       DATABASE_URL,
       TRACKING_ALLOW_IN_MEMORY_FALLBACK: "false",
       OTEL_SDK_DISABLED: "true",
+      BEARER_TOKEN,
       EVM_PRIVATE_KEY: privateKey,
       EVM_NETWORKS: process.env.EVM_NETWORKS ?? "base-sepolia",
     },
@@ -109,7 +111,10 @@ async function run(): Promise<void> {
 
     const verifyResponse = await fetch(`${baseUrl}/verify`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${BEARER_TOKEN}`,
+      },
       body: JSON.stringify({}),
     });
 

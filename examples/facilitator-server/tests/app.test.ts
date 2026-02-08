@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { createApp } from "../src/app.js";
 import { createTracking } from "../src/db.js";
 import type { AppConfig } from "../src/app.js";
+import { createBearerTokenModule } from "../src/modules/bearer-token.js";
 
 let tracking: ReturnType<typeof createTracking>;
 let app: ReturnType<typeof createApp>;
@@ -117,5 +118,35 @@ describe("/verify tracking with missing body", () => {
     expect(record.responseStatus).toBe(400);
     expect(record.handlerExecuted).toBe(false);
     expect(record.paymentVerified).toBe(false);
+  });
+});
+
+describe("bearer token module integration", () => {
+  it("rejects /verify without authorization header when module is configured", async () => {
+    const guardedApp = createApp({
+      facilitator: mockFacilitator,
+      tracking,
+      modules: [
+        createBearerTokenModule({
+          tokens: ["DREAMS"],
+        }),
+      ],
+    });
+
+    const response = await guardedApp.handle(
+      new Request("http://localhost/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentPayload,
+          paymentRequirements,
+        }),
+      })
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toBe(
+      'Bearer realm="facilitator"'
+    );
   });
 });
