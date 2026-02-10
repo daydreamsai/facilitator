@@ -27,6 +27,18 @@ describe("x402 tracking helpers", () => {
     expect(hashCanonicalJson(left)).toBe(hashCanonicalJson(right));
   });
 
+  it("omits undefined object fields when hashing canonical JSON", () => {
+    const withUndefined = {
+      a: 1,
+      b: undefined,
+    };
+    const withoutUndefined = {
+      a: 1,
+    };
+
+    expect(hashCanonicalJson(withUndefined)).toBe(hashCanonicalJson(withoutUndefined));
+  });
+
   it("extracts x402 fields from nested payment payload", () => {
     const payload = {
       x402Version: 2,

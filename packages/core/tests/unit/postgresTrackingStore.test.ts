@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import { PostgresResourceTrackingStore } from "../../src/tracking/postgres-store.js";
 import type { ResourceCallRecord } from "../../src/tracking/types.js";
 
-describe("PostgresResourceTrackingStore.update", () => {
+describe("PostgresResourceTrackingStore", () => {
   it("persists expanded x402 audit columns during create", async () => {
     const query = mock(async () => []);
     const store = new PostgresResourceTrackingStore({

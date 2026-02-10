@@ -68,6 +68,39 @@ describe("/verify tracking", () => {
     expect(record.request.queryParams.tag).toEqual(["a", "b"]);
     expect(record.request.headers["x-request-id"]).toBe("req-verify-1");
   });
+
+  it("tracks payment details when verify throws with valid body", async () => {
+    const failingApp = createApp({
+      facilitator: {
+        ...mockFacilitator,
+        verify: async () => {
+          throw new Error("verify failed");
+        },
+      },
+      tracking,
+    });
+
+    const response = await failingApp.handle(
+      new Request("http://localhost/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentPayload,
+          paymentRequirements,
+        }),
+      })
+    );
+
+    expect(response.status).toBe(500);
+
+    const records = await tracking.list({ limit: 10, filters: { path: "/verify" } });
+    expect(records.total).toBe(1);
+
+    const record = records.records[0];
+    expect(record.paymentVerified).toBe(false);
+    expect(record.payment?.network).toBe("eip155:8453");
+    expect(record.payment?.payer).toBe("0x1234567890123456789012345678901234567890");
+  });
 });
 
 describe("/settle tracking", () => {

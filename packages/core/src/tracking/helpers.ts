@@ -176,11 +176,13 @@ const canonicalizeJson = (value: unknown): string => {
   if (!isRecord(value)) return "null";
 
   const keys = Object.keys(value).sort();
-  const serialized = keys.map((key) => {
-    const keyPart = JSON.stringify(key);
-    const valuePart = canonicalizeJson(value[key]);
-    return `${keyPart}:${valuePart}`;
-  });
+  const serialized = keys
+    .filter((key) => typeof value[key] !== "undefined")
+    .map((key) => {
+      const keyPart = JSON.stringify(key);
+      const valuePart = canonicalizeJson(value[key]);
+      return `${keyPart}:${valuePart}`;
+    });
 
   return `{${serialized.join(",")}}`;
 };

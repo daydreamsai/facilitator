@@ -229,7 +229,9 @@ export function createApp(config: AppConfig) {
               module.recordVerification(
                 trackingId,
                 false,
-                undefined,
+                paymentPayload && paymentRequirements
+                  ? extractPaymentDetails(paymentPayload, paymentRequirements)
+                  : undefined,
                 error instanceof Error ? error.message : "Unknown error",
                 paymentPayload && paymentRequirements
                   ? extractX402AuditFields(paymentPayload, paymentRequirements)
