@@ -9,7 +9,7 @@ describe("resourceCallRecords schema", () => {
     expect(config.name).toBe("resource_call_records");
   });
 
-  it("has all 18 expected columns", () => {
+  it("has all expected columns", () => {
     const columnNames = config.columns.map((c) => c.name);
     const expected = [
       "id",
@@ -24,6 +24,12 @@ describe("resourceCallRecords schema", () => {
       "payment",
       "settlement",
       "upto_session",
+      "x402_version",
+      "payment_nonce",
+      "payment_valid_before",
+      "payload_hash",
+      "requirements_hash",
+      "payment_signature_hash",
       "response_status",
       "response_time_ms",
       "handler_executed",
@@ -35,7 +41,7 @@ describe("resourceCallRecords schema", () => {
     for (const name of expected) {
       expect(columnNames).toContain(name);
     }
-    expect(config.columns.length).toBe(18);
+    expect(config.columns.length).toBe(expected.length);
   });
 
   it("has id as primary key", () => {

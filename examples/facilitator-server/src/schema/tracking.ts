@@ -16,7 +16,6 @@ import {
   jsonb,
   index,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 export const resourceCallRecords = pgTable(
   "resource_call_records",
@@ -35,6 +34,12 @@ export const resourceCallRecords = pgTable(
     payment: jsonb("payment"),
     settlement: jsonb("settlement"),
     uptoSession: jsonb("upto_session"),
+    x402Version: integer("x402_version"),
+    paymentNonce: text("payment_nonce"),
+    paymentValidBefore: text("payment_valid_before"),
+    payloadHash: text("payload_hash"),
+    requirementsHash: text("requirements_hash"),
+    paymentSignatureHash: text("payment_signature_hash"),
 
     responseStatus: integer("response_status").notNull().default(0),
     responseTimeMs: integer("response_time_ms").notNull().default(0),
@@ -48,5 +53,9 @@ export const resourceCallRecords = pgTable(
     index("idx_records_timestamp").on(table.timestamp),
     index("idx_records_path").on(table.path),
     index("idx_records_payment_verified").on(table.paymentVerified),
+    index("idx_records_x402_version").on(table.x402Version),
+    index("idx_records_payment_nonce").on(table.paymentNonce),
+    index("idx_records_payload_hash").on(table.payloadHash),
+    index("idx_records_requirements_hash").on(table.requirementsHash),
   ],
 );

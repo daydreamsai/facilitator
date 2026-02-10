@@ -109,7 +109,18 @@ export interface ResourceTrackingModule {
     id: string,
     verified: boolean,
     payment?: TrackedPayment,
-    error?: string
+    error?: string,
+    x402Audit?: Partial<
+      Pick<
+        ResourceCallRecord,
+        | "x402Version"
+        | "paymentNonce"
+        | "paymentValidBefore"
+        | "payloadHash"
+        | "requirementsHash"
+        | "paymentSignatureHash"
+      >
+    >
   ): Promise<void>;
 
   /**
@@ -181,6 +192,27 @@ export function createResourceTrackingModule(
   const asyncTracking = config.asyncTracking ?? true;
   const captureHeaders = config.captureHeaders ?? [];
   const onTrackingError = config.onTrackingError;
+  const operationQueues = new Map<string, Promise<void>>();
+
+  const enqueueTrackingOperation = (
+    recordId: string,
+    fn: () => Promise<void>
+  ): Promise<void> => {
+    const previous = operationQueues.get(recordId) ?? Promise.resolve();
+    const run = previous.then(fn);
+    const queue = run.catch(() => {
+      // Keep queue alive after individual operation failures.
+    });
+
+    operationQueues.set(recordId, queue);
+    queue.finally(() => {
+      if (operationQueues.get(recordId) === queue) {
+        operationQueues.delete(recordId);
+      }
+    });
+
+    return run;
+  };
 
   /**
    * Execute tracking operation with error handling
@@ -189,15 +221,17 @@ export function createResourceTrackingModule(
     fn: () => Promise<void>,
     recordId: string
   ): Promise<void> => {
+    const operation = enqueueTrackingOperation(recordId, fn);
+
     if (asyncTracking) {
-      // Fire-and-forget: don't await, just handle errors
-      fn().catch((err) => {
+      // Fire-and-forget: don't await request path, but keep per-record ordering.
+      operation.catch((err) => {
         onTrackingError?.(err as Error, recordId);
       });
     } else {
       // Synchronous: await and propagate errors
       try {
-        await fn();
+        await operation;
       } catch (err) {
         onTrackingError?.(err as Error, recordId);
         throw err;
@@ -275,7 +309,18 @@ export function createResourceTrackingModule(
       id: string,
       verified: boolean,
       payment?: TrackedPayment,
-      error?: string
+      error?: string,
+      x402Audit?: Partial<
+        Pick<
+          ResourceCallRecord,
+          | "x402Version"
+          | "paymentNonce"
+          | "paymentValidBefore"
+          | "payloadHash"
+          | "requirementsHash"
+          | "paymentSignatureHash"
+        >
+      >
     ): Promise<void> {
       await safeTrack(async () => {
         await Promise.resolve(
@@ -283,6 +328,7 @@ export function createResourceTrackingModule(
             paymentVerified: verified,
             payment,
             verificationError: error,
+            ...x402Audit,
           })
         );
       }, id);

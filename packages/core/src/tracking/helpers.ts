@@ -7,7 +7,13 @@
 
 import type { HTTPAdapter } from "@x402/core/http";
 import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
-import type { TrackedPayment, TrackedRequest, TrackedRouteConfig } from "./types.js";
+import { createHash } from "node:crypto";
+import type {
+  ResourceCallRecord,
+  TrackedPayment,
+  TrackedRequest,
+  TrackedRouteConfig,
+} from "./types.js";
 
 /**
  * Default headers to capture from requests
@@ -89,6 +95,9 @@ export function formatAmount(amount: string, asset: string): string {
 export function extractPayer(payload: PaymentPayload): string {
   // Cast to unknown first for safe property access
   const p = payload as Record<string, unknown>;
+  const nestedPayload = isRecord(p.payload)
+    ? (p.payload as Record<string, unknown>)
+    : undefined;
 
   // The payer is typically in the authorization field
   if (p.authorization && typeof p.authorization === "object") {
@@ -100,6 +109,15 @@ export function extractPayer(payload: PaymentPayload): string {
     // Check for owner field (upto scheme)
     if (typeof auth.owner === "string") {
       return auth.owner;
+    }
+  }
+  if (nestedPayload?.authorization && typeof nestedPayload.authorization === "object") {
+    const nestedAuth = nestedPayload.authorization as Record<string, unknown>;
+    if (typeof nestedAuth.from === "string") {
+      return nestedAuth.from;
+    }
+    if (typeof nestedAuth.owner === "string") {
+      return nestedAuth.owner;
     }
   }
 
@@ -137,6 +155,96 @@ export function extractPaymentDetails(
     currency,
     payer: extractPayer(payload),
     payTo: requirements.payTo,
+  };
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+
+const canonicalizeJson = (value: unknown): string => {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "null";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "bigint") return JSON.stringify(value.toString());
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalizeJson(item)).join(",")}]`;
+  }
+  if (value instanceof Date) {
+    return JSON.stringify(value.toISOString());
+  }
+  if (!isRecord(value)) return "null";
+
+  const keys = Object.keys(value).sort();
+  const serialized = keys.map((key) => {
+    const keyPart = JSON.stringify(key);
+    const valuePart = canonicalizeJson(value[key]);
+    return `${keyPart}:${valuePart}`;
+  });
+
+  return `{${serialized.join(",")}}`;
+};
+
+export function hashCanonicalJson(value: unknown): string {
+  const canonical = canonicalizeJson(value);
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
+const normalizeOptionalNumber = (value: unknown): number | undefined => {
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isInteger(parsed)) return parsed;
+  }
+  return undefined;
+};
+
+const normalizeOptionalString = (value: unknown): string | undefined => {
+  if (typeof value === "string" && value.length > 0) return value;
+  if (typeof value === "number" || typeof value === "bigint") {
+    return String(value);
+  }
+  return undefined;
+};
+
+/**
+ * Extract audit-focused x402 fields for first-class SQL columns.
+ */
+export function extractX402AuditFields(
+  payload: PaymentPayload,
+  requirements: PaymentRequirements
+): Pick<
+  ResourceCallRecord,
+  | "x402Version"
+  | "paymentNonce"
+  | "paymentValidBefore"
+  | "payloadHash"
+  | "requirementsHash"
+  | "paymentSignatureHash"
+> {
+  const p = payload as Record<string, unknown>;
+  const nestedPayload = isRecord(p.payload) ? p.payload : undefined;
+  const rootAuth = isRecord(p.authorization) ? p.authorization : undefined;
+  const nestedAuth = nestedPayload && isRecord(nestedPayload.authorization)
+    ? nestedPayload.authorization
+    : undefined;
+  const auth = nestedAuth ?? rootAuth;
+
+  const signature = normalizeOptionalString(
+    nestedPayload?.signature ?? p.signature
+  );
+
+  return {
+    x402Version: normalizeOptionalNumber(p.x402Version ?? p.x402_version),
+    paymentNonce: normalizeOptionalString(auth?.nonce),
+    paymentValidBefore: normalizeOptionalString(auth?.validBefore),
+    payloadHash: hashCanonicalJson(payload),
+    requirementsHash: hashCanonicalJson(requirements),
+    paymentSignatureHash: signature
+      ? createHash("sha256").update(signature).digest("hex")
+      : undefined,
   };
 }
 

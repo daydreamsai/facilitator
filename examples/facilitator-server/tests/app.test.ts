@@ -119,6 +119,26 @@ describe("/verify tracking with missing body", () => {
     expect(record.handlerExecuted).toBe(false);
     expect(record.paymentVerified).toBe(false);
   });
+
+  it("handles undefined request body without crashing catch path", async () => {
+    const response = await app.handle(
+      new Request("http://localhost/verify", {
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(500);
+
+    const records = await tracking.list({
+      limit: 10,
+      filters: { path: "/verify" },
+    });
+    expect(records.total).toBe(1);
+    const record = records.records[0];
+    expect(record.responseStatus).toBe(500);
+    expect(record.handlerExecuted).toBe(false);
+    expect(record.paymentVerified).toBe(false);
+  });
 });
 
 describe("bearer token module integration", () => {

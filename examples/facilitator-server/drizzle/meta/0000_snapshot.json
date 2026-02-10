@@ -80,6 +80,42 @@
           "primaryKey": false,
           "notNull": false
         },
+        "x402_version": {
+          "name": "x402_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_nonce": {
+          "name": "payment_nonce",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_valid_before": {
+          "name": "payment_valid_before",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requirements_hash": {
+          "name": "requirements_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_signature_hash": {
+          "name": "payment_signature_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "response_status": {
           "name": "response_status",
           "type": "integer",
@@ -156,6 +192,66 @@
           "columns": [
             {
               "expression": "payment_verified",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_records_x402_version": {
+          "name": "idx_records_x402_version",
+          "columns": [
+            {
+              "expression": "x402_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_records_payment_nonce": {
+          "name": "idx_records_payment_nonce",
+          "columns": [
+            {
+              "expression": "payment_nonce",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_records_payload_hash": {
+          "name": "idx_records_payload_hash",
+          "columns": [
+            {
+              "expression": "payload_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_records_requirements_hash": {
+          "name": "idx_records_requirements_hash",
+          "columns": [
+            {
+              "expression": "requirements_hash",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

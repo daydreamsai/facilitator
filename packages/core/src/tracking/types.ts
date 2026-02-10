@@ -127,6 +127,18 @@ export interface ResourceCallRecord {
   settlement?: TrackedSettlement;
   /** Upto session details (for upto scheme) */
   uptoSession?: TrackedUptoSession;
+  /** x402 protocol version */
+  x402Version?: number;
+  /** Authorization nonce from x402 payload */
+  paymentNonce?: string;
+  /** Authorization valid-before value from x402 payload */
+  paymentValidBefore?: string;
+  /** SHA-256 hash of canonicalized payment payload */
+  payloadHash?: string;
+  /** SHA-256 hash of canonicalized payment requirements */
+  requirementsHash?: string;
+  /** SHA-256 hash of payment signature */
+  paymentSignatureHash?: string;
 
   /** HTTP response status code */
   responseStatus: number;

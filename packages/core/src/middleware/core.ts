@@ -21,6 +21,7 @@ import {
   extractPaymentDetails,
   extractRequestMetadata,
   extractRouteConfig,
+  extractX402AuditFields,
 } from "../tracking/helpers.js";
 
 // -----------------------------------------------------------------------------
@@ -288,8 +289,18 @@ export async function processBeforeHandle(
       result.paymentPayload,
       result.paymentRequirements
     );
+    const x402Audit = extractX402AuditFields(
+      result.paymentPayload,
+      result.paymentRequirements
+    );
     await safeTrack(async () => {
-      await resourceTracking.recordVerification(resourceTrackingId, true, payment);
+      await resourceTracking.recordVerification(
+        resourceTrackingId,
+        true,
+        payment,
+        undefined,
+        x402Audit
+      );
     });
   }
 

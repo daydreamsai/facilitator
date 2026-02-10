@@ -88,5 +88,7 @@ export {
   extractCurrency,
   extractPayer,
   formatAmount,
+  extractX402AuditFields,
+  hashCanonicalJson,
   generateTrackingId,
 } from "./helpers.js";

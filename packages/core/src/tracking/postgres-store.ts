@@ -89,6 +89,12 @@ CREATE TABLE IF NOT EXISTS resource_call_records (
   payment JSONB,
   settlement JSONB,
   upto_session JSONB,
+  x402_version INTEGER,
+  payment_nonce TEXT,
+  payment_valid_before TEXT,
+  payload_hash TEXT,
+  requirements_hash TEXT,
+  payment_signature_hash TEXT,
 
   response_status INTEGER NOT NULL DEFAULT 0,
   response_time_ms INTEGER NOT NULL DEFAULT 0,
@@ -107,6 +113,10 @@ CREATE INDEX IF NOT EXISTS idx_records_payment_scheme ON resource_call_records((
 CREATE INDEX IF NOT EXISTS idx_records_payment_payer ON resource_call_records((payment->>'payer')) WHERE payment IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_records_payment_verified ON resource_call_records(payment_verified);
 CREATE INDEX IF NOT EXISTS idx_records_settlement_success ON resource_call_records((settlement->>'success')) WHERE settlement IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_records_x402_version ON resource_call_records(x402_version);
+CREATE INDEX IF NOT EXISTS idx_records_payment_nonce ON resource_call_records(payment_nonce);
+CREATE INDEX IF NOT EXISTS idx_records_payload_hash ON resource_call_records(payload_hash);
+CREATE INDEX IF NOT EXISTS idx_records_requirements_hash ON resource_call_records(requirements_hash);
 `;
 
 const quoteIdentifier = (value: string): string =>
@@ -136,6 +146,12 @@ CREATE TABLE IF NOT EXISTS ${tableRef} (
   payment JSONB,
   settlement JSONB,
   upto_session JSONB,
+  x402_version INTEGER,
+  payment_nonce TEXT,
+  payment_valid_before TEXT,
+  payload_hash TEXT,
+  requirements_hash TEXT,
+  payment_signature_hash TEXT,
 
   response_status INTEGER NOT NULL DEFAULT 0,
   response_time_ms INTEGER NOT NULL DEFAULT 0,
@@ -154,6 +170,10 @@ CREATE INDEX IF NOT EXISTS ${indexName("payment_scheme")} ON ${tableRef}((paymen
 CREATE INDEX IF NOT EXISTS ${indexName("payment_payer")} ON ${tableRef}((payment->>'payer')) WHERE payment IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ${indexName("payment_verified")} ON ${tableRef}(payment_verified);
 CREATE INDEX IF NOT EXISTS ${indexName("settlement_success")} ON ${tableRef}((settlement->>'success')) WHERE settlement IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ${indexName("x402_version")} ON ${tableRef}(x402_version);
+CREATE INDEX IF NOT EXISTS ${indexName("payment_nonce")} ON ${tableRef}(payment_nonce);
+CREATE INDEX IF NOT EXISTS ${indexName("payload_hash")} ON ${tableRef}(payload_hash);
+CREATE INDEX IF NOT EXISTS ${indexName("requirements_hash")} ON ${tableRef}(requirements_hash);
 `;
 };
 
@@ -188,6 +208,8 @@ export class PostgresResourceTrackingStore implements ResourceTrackingStore {
         id, method, path, route_key, url, timestamp,
         payment_required, payment_verified, verification_error,
         payment, settlement, upto_session,
+        x402_version, payment_nonce, payment_valid_before,
+        payload_hash, requirements_hash, payment_signature_hash,
         response_status, response_time_ms, handler_executed,
         request, route_config, metadata
       ) VALUES (
@@ -195,7 +217,9 @@ export class PostgresResourceTrackingStore implements ResourceTrackingStore {
         $7, $8, $9,
         $10, $11, $12,
         $13, $14, $15,
-        $16, $17, $18
+        $16, $17, $18,
+        $19, $20, $21,
+        $22, $23, $24
       )
     `;
 
@@ -212,6 +236,12 @@ export class PostgresResourceTrackingStore implements ResourceTrackingStore {
       record.payment ? JSON.stringify(record.payment) : null,
       record.settlement ? JSON.stringify(record.settlement) : null,
       record.uptoSession ? JSON.stringify(record.uptoSession) : null,
+      record.x402Version ?? null,
+      record.paymentNonce ?? null,
+      record.paymentValidBefore ?? null,
+      record.payloadHash ?? null,
+      record.requirementsHash ?? null,
+      record.paymentSignatureHash ?? null,
       record.responseStatus,
       record.responseTimeMs,
       record.handlerExecuted,
@@ -237,6 +267,9 @@ export class PostgresResourceTrackingStore implements ResourceTrackingStore {
     if (updates.verificationError !== undefined) {
       setClauses.push(`verification_error = $${paramIndex++}`);
       params.push(updates.verificationError);
+    } else if (updates.paymentVerified === true) {
+      // Successful verification clears any previous error.
+      setClauses.push("verification_error = NULL");
     }
     if (updates.payment !== undefined) {
       setClauses.push(`payment = $${paramIndex++}`);
@@ -249,6 +282,30 @@ export class PostgresResourceTrackingStore implements ResourceTrackingStore {
     if (updates.uptoSession !== undefined) {
       setClauses.push(`upto_session = $${paramIndex++}`);
       params.push(JSON.stringify(updates.uptoSession));
+    }
+    if (updates.x402Version !== undefined) {
+      setClauses.push(`x402_version = $${paramIndex++}`);
+      params.push(updates.x402Version);
+    }
+    if (updates.paymentNonce !== undefined) {
+      setClauses.push(`payment_nonce = $${paramIndex++}`);
+      params.push(updates.paymentNonce);
+    }
+    if (updates.paymentValidBefore !== undefined) {
+      setClauses.push(`payment_valid_before = $${paramIndex++}`);
+      params.push(updates.paymentValidBefore);
+    }
+    if (updates.payloadHash !== undefined) {
+      setClauses.push(`payload_hash = $${paramIndex++}`);
+      params.push(updates.payloadHash);
+    }
+    if (updates.requirementsHash !== undefined) {
+      setClauses.push(`requirements_hash = $${paramIndex++}`);
+      params.push(updates.requirementsHash);
+    }
+    if (updates.paymentSignatureHash !== undefined) {
+      setClauses.push(`payment_signature_hash = $${paramIndex++}`);
+      params.push(updates.paymentSignatureHash);
     }
     if (updates.responseStatus !== undefined) {
       setClauses.push(`response_status = $${paramIndex++}`);
@@ -274,9 +331,13 @@ export class PostgresResourceTrackingStore implements ResourceTrackingStore {
       UPDATE ${this.table}
       SET ${setClauses.join(", ")}
       WHERE id = $${paramIndex}
+      RETURNING id
     `;
 
-    await this.client.query(sql, params);
+    const updated = await this.client.queryOne<{ id: unknown }>(sql, params);
+    if (!updated) {
+      throw new Error(`Tracking record not found for update: ${id}`);
+    }
   }
 
   async get(id: string): Promise<ResourceCallRecord | undefined> {
@@ -556,6 +617,21 @@ export class PostgresResourceTrackingStore implements ResourceTrackingStore {
         : undefined,
       uptoSession: row.upto_session
         ? (this.parseJson(row.upto_session) as TrackedUptoSession)
+        : undefined,
+      x402Version:
+        row.x402_version === null || row.x402_version === undefined
+          ? undefined
+          : Number(row.x402_version),
+      paymentNonce: row.payment_nonce ? String(row.payment_nonce) : undefined,
+      paymentValidBefore: row.payment_valid_before
+        ? String(row.payment_valid_before)
+        : undefined,
+      payloadHash: row.payload_hash ? String(row.payload_hash) : undefined,
+      requirementsHash: row.requirements_hash
+        ? String(row.requirements_hash)
+        : undefined,
+      paymentSignatureHash: row.payment_signature_hash
+        ? String(row.payment_signature_hash)
         : undefined,
       responseStatus: Number(row.response_status),
       responseTimeMs: Number(row.response_time_ms),
