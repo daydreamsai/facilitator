@@ -242,7 +242,15 @@ const signer = createCdpEvmSigner({
 
 // Create facilitator
 const facilitator = createFacilitator({
-  evmSigners: [{ signer, networks: "eip155:8453", schemes: ["exact", "upto"] }],
+  evmSigners: [{
+    signer,
+    networks: "eip155:8453",
+    schemes: ["exact", "upto"],
+    upto: {
+      // Optional: fail /verify early for underfunded payers
+      verifyBalanceCheck: true,
+    },
+  }],
 });
 ```
 
@@ -373,6 +381,7 @@ curl -H "x-wallet-address: 0xYourWalletAddress" \
 | Variable | Required | Default | Description |
 | -------- | -------- | ------- | ----------- |
 | `PORT`   | No       | `8090`  | Server port |
+| `UPTO_VERIFY_BALANCE_CHECK` | No | `false` | For `upto`, enables on-chain `balanceOf(owner)` preflight in `/verify` (after permit validation). Returns `insufficient_balance` or `balance_check_failed` when enabled |
 
 ### Network Configuration
 
@@ -537,7 +546,12 @@ const signer = createCdpEvmSigner({
 
 const facilitator = createFacilitator({
   evmSigners: [
-    { signer, networks: "eip155:8453", schemes: ["exact", "upto"] },
+    {
+      signer,
+      networks: "eip155:8453",
+      schemes: ["exact", "upto"],
+      upto: { verifyBalanceCheck: true },
+    },
   ],
 });
 ```
@@ -671,6 +685,18 @@ Validates a payment signature against requirements.
 { "isValid": false, "invalidReason": "invalid_signature" }
 ```
 
+For `upto` payments, `/verify` always validates permit shape/signature/cap/deadline/spender.
+By default it is signature-only and does not query on-chain balance. To enable optional
+post-signature balance preflight:
+
+- Set `evmSigners[].upto.verifyBalanceCheck = true` in `createFacilitator(...)`
+- Or set `UPTO_VERIFY_BALANCE_CHECK=true` when using `examples/facilitator-server`
+
+With preflight enabled, `/verify` may also return:
+
+- `invalidReason: "insufficient_balance"` when `balanceOf(owner) < requirements.amount`
+- `invalidReason: "balance_check_failed"` when the balance RPC check fails (fail-closed)
+
 ### POST /settle
 
 Executes on-chain payment settlement.
@@ -727,6 +753,9 @@ Starknet exact payments are gasless for users because a **paymaster** sponsors g
 ### Upto Scheme (Batched Payments)
 
 Permit-based flow for efficient EVM token payments:
+
+`/verify` for `upto` always checks permit correctness. Optional balance preflight can be
+enabled via `upto.verifyBalanceCheck` to reject underfunded payers before settlement.
 
 1. **Client signs once** - ERC-2612 Permit for a cap amount
 2. **Multiple requests** - Reuse the same Permit signature

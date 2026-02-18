@@ -50,6 +50,16 @@ export interface EvmSignerConfig {
    * Required when registerV1 is true to map CAIP IDs to v1 network names.
    */
   v1NetworkNames?: V1NetworkName | V1NetworkName[];
+  /**
+   * Upto EVM scheme behavior customizations.
+   */
+  upto?: {
+    /**
+     * If true, /verify runs an on-chain `balanceOf(owner)` check and fails
+     * early with `insufficient_balance` when funds are below requirements.amount.
+     */
+    verifyBalanceCheck?: boolean;
+  };
 }
 
 export interface SvmSignerConfig {
@@ -170,6 +180,7 @@ export function createFacilitator(config: FacilitatorConfig): x402Facilitator {
       registerUptoEvmScheme(facilitator, {
         signer: evmConfig.signer,
         networks: evmConfig.networks,
+        options: evmConfig.upto,
       });
     }
   }

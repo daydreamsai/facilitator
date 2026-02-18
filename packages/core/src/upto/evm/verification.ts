@@ -15,8 +15,10 @@ import { getAddress } from "viem";
 import {
   type UptoEvmAuthorization,
   type UptoEvmPayload,
+  erc20Abi,
   toBigInt,
 } from "./constants.js";
+import type { UptoEvmSchemeOptions } from "./facilitator.js";
 
 /**
  * Context needed for verification.
@@ -25,6 +27,7 @@ export interface VerificationContext {
   signer: FacilitatorEvmSigner;
   payload: PaymentPayload;
   requirements: PaymentRequirements;
+  options?: UptoEvmSchemeOptions;
 }
 
 /**
@@ -39,11 +42,12 @@ export interface VerificationContext {
  * - Cap covers required amount
  * - Authorization not expired
  * - Permit signature is valid
+ * - Optional on-chain balance preflight (if enabled)
  */
 export async function verifyUptoPayment(
   ctx: VerificationContext
 ): Promise<VerifyResponse> {
-  const { signer, payload, requirements } = ctx;
+  const { signer, payload, requirements, options } = ctx;
 
   const uptoPayload = payload.payload as unknown as Partial<UptoEvmPayload>;
   const authorization = uptoPayload.authorization as
@@ -215,6 +219,32 @@ export async function verifyUptoPayment(
       invalidReason: "invalid_permit_signature",
       payer,
     };
+  }
+
+  // Optional on-chain balance preflight.
+  if (options?.verifyBalanceCheck) {
+    try {
+      const balance = (await signer.readContract({
+        address: getAddress(requirements.asset),
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [ownerAddress],
+      })) as bigint;
+
+      if (balance < requiredAmount) {
+        return {
+          isValid: false,
+          invalidReason: "insufficient_balance",
+          payer,
+        };
+      }
+    } catch {
+      return {
+        isValid: false,
+        invalidReason: "balance_check_failed",
+        payer,
+      };
+    }
   }
 
   return {

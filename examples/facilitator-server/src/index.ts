@@ -12,6 +12,7 @@
  * - CDP_API_KEY_ID, CDP_API_KEY_SECRET, CDP_WALLET_SECRET: For CDP signer
  * - EVM_PRIVATE_KEY, SVM_PRIVATE_KEY: For private key signer (fallback)
  * - EVM_RPC_URL_BASE, EVM_RPC_URL_BASE_SEPOLIA: RPC URLs
+ * - UPTO_VERIFY_BALANCE_CHECK: "true" to enforce on-chain balance preflight in /verify for upto
  * - BEARER_TOKEN: Required bearer token for /verify and /settle
  * - BEARER_TOKENS: Optional comma-separated bearer token list (overrides BEARER_TOKEN)
  */

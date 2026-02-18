@@ -47,6 +47,8 @@ type StarknetConfig = FacilitatorConfig["starknetConfigs"] extends
   ? T
   : never;
 type NetworkId = EvmSignerConfig["networks"];
+const UPTO_VERIFY_BALANCE_CHECK =
+  process.env.UPTO_VERIFY_BALANCE_CHECK === "true";
 
 // ============================================================================
 // Default Signers
@@ -107,6 +109,7 @@ async function createDefaultSigners(): Promise<{
         signer,
         networks: network.caip as NetworkId,
         schemes: ["exact", "upto"],
+        upto: { verifyBalanceCheck: UPTO_VERIFY_BALANCE_CHECK },
         deployERC4337WithEIP6492: true,
         // Enable v1 for networks that support it
         registerV1: network.supportsV1,
@@ -150,6 +153,7 @@ async function createDefaultSigners(): Promise<{
         signer,
         networks: network.caip as NetworkId,
         schemes: ["exact", "upto"],
+        upto: { verifyBalanceCheck: UPTO_VERIFY_BALANCE_CHECK },
         deployERC4337WithEIP6492: true,
         // Enable v1 for networks that support it
         registerV1: network.supportsV1,

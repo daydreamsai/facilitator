@@ -17,6 +17,14 @@ import type { FacilitatorEvmSigner } from "@x402/evm";
 import { verifyUptoPayment } from "./verification.js";
 import { settleUptoPayment } from "./settlement.js";
 
+export interface UptoEvmSchemeOptions {
+  /**
+   * Enable an on-chain `balanceOf(owner)` preflight check during verify.
+   * Disabled by default to avoid additional RPC latency.
+   */
+  verifyBalanceCheck?: boolean;
+}
+
 /**
  * Upto EVM scheme facilitator.
  *
@@ -28,7 +36,10 @@ export class UptoEvmScheme implements SchemeNetworkFacilitator {
   readonly scheme = "upto";
   readonly caipFamily = "eip155:*";
 
-  constructor(private readonly signer: FacilitatorEvmSigner) {}
+  constructor(
+    private readonly signer: FacilitatorEvmSigner,
+    private readonly options: UptoEvmSchemeOptions = {}
+  ) {}
 
   getExtra(_: string): Record<string, unknown> | undefined {
     return undefined;
@@ -46,6 +57,7 @@ export class UptoEvmScheme implements SchemeNetworkFacilitator {
       signer: this.signer,
       payload,
       requirements,
+      options: this.options,
     });
   }
 

@@ -21,6 +21,26 @@ import {
   errorSummary,
 } from "./constants.js";
 
+function mapTransferErrorReason(error: unknown): string {
+  const summary = errorSummary(error).toLowerCase();
+
+  if (
+    summary.includes("transfer amount exceeds balance") ||
+    summary.includes("insufficient balance")
+  ) {
+    return "insufficient_balance";
+  }
+
+  if (
+    summary.includes("transfer amount exceeds allowance") ||
+    summary.includes("insufficient allowance")
+  ) {
+    return "insufficient_allowance";
+  }
+
+  return "transaction_failed";
+}
+
 /**
  * Context needed for settlement.
  */
@@ -171,7 +191,7 @@ export async function settleUptoPayment(
     console.error("Failed to settle upto payment:", error);
     return {
       success: false,
-      errorReason: "transaction_failed",
+      errorReason: mapTransferErrorReason(error),
       transaction: "",
       network: payload.accepted.network,
       payer,

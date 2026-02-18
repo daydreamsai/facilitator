@@ -392,6 +392,85 @@ describe("UptoEvmScheme", () => {
       });
     });
 
+    describe("balance preflight", () => {
+      it("rejects underfunded payer when balance check is enabled", async () => {
+        mockSigner = createMockSigner({
+          readContract: mock(() => Promise.resolve(50n)),
+        });
+        scheme = new UptoEvmScheme(mockSigner, {
+          verifyBalanceCheck: true,
+        });
+
+        const payload = createValidPayload();
+        const requirements = createValidRequirements();
+        requirements.amount = "100000";
+
+        const result = await scheme.verify(payload, requirements);
+
+        expect(result.isValid).toBe(false);
+        expect(result.invalidReason).toBe("insufficient_balance");
+      });
+
+      it("returns balance_check_failed when balance preflight RPC call fails", async () => {
+        mockSigner = createMockSigner({
+          readContract: mock(() => Promise.reject(new Error("RPC unavailable"))),
+        });
+        scheme = new UptoEvmScheme(mockSigner, {
+          verifyBalanceCheck: true,
+        });
+
+        const payload = createValidPayload();
+        const requirements = createValidRequirements();
+
+        const result = await scheme.verify(payload, requirements);
+
+        expect(result.isValid).toBe(false);
+        expect(result.invalidReason).toBe("balance_check_failed");
+      });
+
+      it("does not run balance preflight when signature is invalid", async () => {
+        const readContractMock = mock(() => Promise.resolve(1000000n));
+        mockSigner = createMockSigner({
+          readContract: readContractMock,
+          verifyTypedData: mock(() => Promise.resolve(false)),
+        });
+        scheme = new UptoEvmScheme(mockSigner, {
+          verifyBalanceCheck: true,
+        });
+
+        const payload = createValidPayload();
+        const requirements = createValidRequirements();
+
+        const result = await scheme.verify(payload, requirements);
+
+        expect(result.isValid).toBe(false);
+        expect(result.invalidReason).toBe("invalid_permit_signature");
+        expect(readContractMock).not.toHaveBeenCalled();
+      });
+
+      it("does not run balance preflight when authorization is expired", async () => {
+        const readContractMock = mock(() => Promise.resolve(1000000n));
+        mockSigner = createMockSigner({
+          readContract: readContractMock,
+        });
+        scheme = new UptoEvmScheme(mockSigner, {
+          verifyBalanceCheck: true,
+        });
+
+        const payload = createValidPayload();
+        const auth = (payload.payload as Record<string, unknown>)
+          .authorization as Record<string, unknown>;
+        auth.validBefore = String(Math.floor(Date.now() / 1000) - 100);
+        const requirements = createValidRequirements();
+
+        const result = await scheme.verify(payload, requirements);
+
+        expect(result.isValid).toBe(false);
+        expect(result.invalidReason).toBe("authorization_expired");
+        expect(readContractMock).not.toHaveBeenCalled();
+      });
+    });
+
     describe("payer extraction", () => {
       it("includes payer in response even on failure", async () => {
         const payload = createValidPayload();
@@ -622,6 +701,31 @@ describe("UptoEvmScheme", () => {
 
         expect(result.success).toBe(false);
         expect(result.errorReason).toBe("transaction_failed");
+      });
+
+      it("returns insufficient_balance when transferFrom reverts for low balance", async () => {
+        const writeContractMock = mock()
+          .mockImplementationOnce(() =>
+            Promise.resolve("0xpermittx" as `0x${string}`)
+          )
+          .mockImplementationOnce(() =>
+            Promise.reject(
+              new Error("ERC20: transfer amount exceeds balance")
+            )
+          );
+
+        mockSigner = createMockSigner({
+          writeContract: writeContractMock,
+        });
+        scheme = new UptoEvmScheme(mockSigner);
+
+        const payload = createValidPayload();
+        const requirements = createValidRequirements();
+
+        const result = await scheme.settle(payload, requirements);
+
+        expect(result.success).toBe(false);
+        expect(result.errorReason).toBe("insufficient_balance");
       });
     });
 

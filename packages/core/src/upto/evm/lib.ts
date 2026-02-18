@@ -33,7 +33,7 @@ export {
 export { registerUptoEvmScheme } from "./register.js";
 
 // Facilitator-side scheme implementation
-export { UptoEvmScheme } from "./facilitator.js";
+export { UptoEvmScheme, type UptoEvmSchemeOptions } from "./facilitator.js";
 
 // Verification and settlement functions (for advanced usage)
 export {
