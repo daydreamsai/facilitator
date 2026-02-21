@@ -1,7 +1,7 @@
 import type { FacilitatorConfig } from "@daydreamsai/facilitator";
 import type { StarknetNetworkSetup } from "@daydreamsai/facilitator/config";
 
-type StarknetConfig = FacilitatorConfig["starknetConfigs"] extends
+export type StarknetConfig = FacilitatorConfig["starknetConfigs"] extends
   | (infer T)[]
   | undefined
   ? T

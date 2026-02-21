@@ -30,7 +30,10 @@ import {
   SVM_PRIVATE_KEY,
   CDP_ACCOUNT_NAME,
 } from "@daydreamsai/facilitator/config";
-import { buildStarknetConfigs } from "./starknet-config.js";
+import {
+  buildStarknetConfigs,
+  type StarknetConfig,
+} from "./starknet-config.js";
 
 type EvmSignerConfig = FacilitatorConfig["evmSigners"] extends
   | (infer T)[]
@@ -38,11 +41,6 @@ type EvmSignerConfig = FacilitatorConfig["evmSigners"] extends
   ? T
   : never;
 type SvmSignerConfig = FacilitatorConfig["svmSigners"] extends
-  | (infer T)[]
-  | undefined
-  ? T
-  : never;
-type StarknetConfig = FacilitatorConfig["starknetConfigs"] extends
   | (infer T)[]
   | undefined
   ? T

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { createFacilitator } from "@daydreamsai/facilitator";
 import { createApp } from "../src/app.js";
 
@@ -28,22 +28,21 @@ const SEPOLIA_CONFIG = {
   sponsorAddress: "0xsepolia-sponsor",
 };
 
-async function fetchSupported(): Promise<SupportedResponse> {
-  const facilitator = createFacilitator({
-    starknetConfigs: [MAINNET_CONFIG, SEPOLIA_CONFIG],
+describe("/supported Starknet integration", () => {
+  let supported: SupportedResponse;
+
+  beforeAll(async () => {
+    const facilitator = createFacilitator({
+      starknetConfigs: [MAINNET_CONFIG, SEPOLIA_CONFIG],
+    });
+    const app = createApp({ facilitator });
+    const response = await app.handle(new Request("http://localhost/supported"));
+
+    expect(response.status).toBe(200);
+    supported = await (response.json() as Promise<SupportedResponse>);
   });
 
-  const app = createApp({ facilitator });
-  const response = await app.handle(new Request("http://localhost/supported"));
-
-  expect(response.status).toBe(200);
-
-  return response.json() as Promise<SupportedResponse>;
-}
-
-describe("/supported Starknet integration", () => {
-  it("returns Starknet kinds when Starknet configs are registered", async () => {
-    const supported = await fetchSupported();
+  it("returns Starknet kinds when Starknet configs are registered", () => {
 
     const starknetKinds = supported.kinds.filter((kind) =>
       kind.network.startsWith("starknet:")
@@ -52,8 +51,7 @@ describe("/supported Starknet integration", () => {
     expect(starknetKinds.length).toBe(2);
   });
 
-  it("includes Starknet paymaster and sponsor metadata in kind.extra", async () => {
-    const supported = await fetchSupported();
+  it("includes Starknet paymaster and sponsor metadata in kind.extra", () => {
 
     const mainnetKind = supported.kinds.find(
       (kind) => kind.network === MAINNET_CONFIG.network && kind.scheme === "exact"
@@ -73,8 +71,7 @@ describe("/supported Starknet integration", () => {
     });
   });
 
-  it('includes Starknet sponsor addresses in signers["starknet:*"]', async () => {
-    const supported = await fetchSupported();
+  it('includes Starknet sponsor addresses in signers["starknet:*"]', () => {
 
     const starknetSigners = supported.signers["starknet:*"] ?? [];
 
@@ -82,8 +79,7 @@ describe("/supported Starknet integration", () => {
     expect(starknetSigners).toContain(SEPOLIA_CONFIG.sponsorAddress);
   });
 
-  it("keeps Starknet networks canonical (starknet:SN_*) with x402 v2", async () => {
-    const supported = await fetchSupported();
+  it("keeps Starknet networks canonical (starknet:SN_*) with x402 v2", () => {
 
     const starknetKinds = supported.kinds.filter((kind) =>
       kind.network.startsWith("starknet:")
