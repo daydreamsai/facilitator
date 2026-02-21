@@ -60,12 +60,15 @@ describe("/supported Starknet integration", () => {
       (kind) => kind.network === SEPOLIA_CONFIG.network && kind.scheme === "exact"
     );
 
-    expect(mainnetKind?.extra).toEqual({
+    expect(mainnetKind).toBeDefined();
+    expect(sepoliaKind).toBeDefined();
+
+    expect(mainnetKind!.extra).toEqual({
       paymasterEndpoint: MAINNET_CONFIG.paymasterEndpoint,
       sponsorAddress: MAINNET_CONFIG.sponsorAddress,
     });
 
-    expect(sepoliaKind?.extra).toEqual({
+    expect(sepoliaKind!.extra).toEqual({
       paymasterEndpoint: SEPOLIA_CONFIG.paymasterEndpoint,
       sponsorAddress: SEPOLIA_CONFIG.sponsorAddress,
     });
