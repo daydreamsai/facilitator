@@ -12,6 +12,11 @@
  * - CDP_API_KEY_ID, CDP_API_KEY_SECRET, CDP_WALLET_SECRET: For CDP signer
  * - EVM_PRIVATE_KEY, SVM_PRIVATE_KEY: For private key signer (fallback)
  * - EVM_RPC_URL_BASE, EVM_RPC_URL_BASE_SEPOLIA: RPC URLs
+ * - STARKNET_NETWORKS: Comma-separated Starknet networks to enable (opt-in, default: disabled)
+ * - STARKNET_RPC_URL_STARKNET_MAINNET, STARKNET_RPC_URL_STARKNET_SEPOLIA: Starknet RPC URLs
+ * - STARKNET_PAYMASTER_ENDPOINT_STARKNET_MAINNET, STARKNET_PAYMASTER_ENDPOINT_STARKNET_SEPOLIA: Starknet paymaster endpoints
+ * - STARKNET_PAYMASTER_API_KEY, STARKNET_PAYMASTER_API_KEY_STARKNET_MAINNET, STARKNET_PAYMASTER_API_KEY_STARKNET_SEPOLIA: Paymaster API key(s)
+ * - STARKNET_SPONSOR_ADDRESS, STARKNET_SPONSOR_ADDRESS_STARKNET_MAINNET, STARKNET_SPONSOR_ADDRESS_STARKNET_SEPOLIA: Sponsor address(es), required for enabled Starknet networks
  * - UPTO_VERIFY_BALANCE_CHECK: "true" to enforce on-chain balance preflight in /verify for upto
  * - BEARER_TOKEN: Required bearer token for /verify and /settle
  * - BEARER_TOKENS: Optional comma-separated bearer token list (overrides BEARER_TOKEN)
