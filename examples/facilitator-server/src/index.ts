@@ -15,6 +15,12 @@
  * - UPTO_VERIFY_BALANCE_CHECK: "true" to enforce on-chain balance preflight in /verify for upto
  * - BEARER_TOKEN: Required bearer token for /verify and /settle
  * - BEARER_TOKENS: Optional comma-separated bearer token list (overrides BEARER_TOKEN)
+ * - SETTLE_MAX_AMOUNT: optional max settle amount (integer atomic units); abort if exceeded
+ * - SETTLE_PAYTO_ALLOWLIST: optional comma-separated payTo allowlist
+ * - SETTLE_NETWORK_ALLOWLIST: optional comma-separated network (CAIP-2) allowlist
+ * - SETTLE_PREFLIGHT_URL: optional generic HTTP preflight (POST JSON payTo/network/amount)
+ * - SETTLE_PREFLIGHT_TIMEOUT_MS: preflight timeout (default 500)
+ * - SETTLE_PREFLIGHT_FAIL_OPEN: "true" to allow settle if preflight request fails (default fail-closed)
  */
 
 import pg from "pg";
@@ -24,6 +30,10 @@ import { createApp } from "./app.js";
 import { createDrizzleAdapter, createTracking } from "./db.js";
 import { runMigrations } from "./db-migrate.js";
 import { createBearerTokenModule } from "./modules/bearer-token.js";
+import {
+  createSettlePolicyHook,
+  parseSettlePolicyFromEnv,
+} from "./settle-policy.js";
 
 const PORT = parseInt(process.env.PORT || "8090", 10);
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -81,8 +91,17 @@ const tracking = createTracking(pgClient, {
   },
 });
 
+// Optional env-gated settle policy (no-op when unset — same as prior behavior)
+const settlePolicy = parseSettlePolicyFromEnv();
+const settleHooks = settlePolicy
+  ? { onBeforeSettle: createSettlePolicyHook(settlePolicy) }
+  : undefined;
+
 // Facilitator + App
-const facilitator = createFacilitator({ ...defaultSigners });
+const facilitator = createFacilitator({
+  ...defaultSigners,
+  ...(settleHooks ? { hooks: settleHooks } : {}),
+});
 const app = createApp({
   facilitator,
   tracking,
@@ -97,6 +116,24 @@ const app = createApp({
 
 app.listen(PORT);
 console.log(`x402 Facilitator listening on http://localhost:${PORT}`);
+if (settlePolicy) {
+  const parts: string[] = [];
+  if (settlePolicy.maxAmount !== undefined) {
+    parts.push(`maxAmount=${settlePolicy.maxAmount.toString()}`);
+  }
+  if (settlePolicy.payToAllowlist?.length) {
+    parts.push(`payToAllowlist=${settlePolicy.payToAllowlist.length}`);
+  }
+  if (settlePolicy.networkAllowlist?.length) {
+    parts.push(`networkAllowlist=${settlePolicy.networkAllowlist.length}`);
+  }
+  if (settlePolicy.preflightUrl) {
+    parts.push(`preflightUrl=set`);
+  }
+  console.log(`Settle policy: enabled (${parts.join(", ")})`);
+} else {
+  console.log(`Settle policy: off (set SETTLE_MAX_AMOUNT / allowlists / SETTLE_PREFLIGHT_URL)`);
+}
 if (pgClient) {
   console.log(`Resource tracking: PostgreSQL (Drizzle)`);
 } else if (DATABASE_URL) {

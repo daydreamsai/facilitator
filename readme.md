@@ -596,7 +596,8 @@ const facilitator = createFacilitator({
 
 ### Lifecycle Hooks
 
-Add custom logic at key points:
+Add custom logic at key points. Before-hooks may **abort** by returning
+`{ abort: true, reason: string }` (x402 core contract).
 
 ```typescript
 const facilitator = createFacilitator({
@@ -612,7 +613,7 @@ const facilitator = createFacilitator({
       // Handle verification failures
     },
     onBeforeSettle: async (ctx) => {
-      // Validate before settlement
+      // Return { abort: true, reason } to block settlement before chain work
     },
     onAfterSettle: async (ctx) => {
       // Analytics, notifications
@@ -623,6 +624,22 @@ const facilitator = createFacilitator({
   },
 });
 ```
+
+### Server settle policy (env-gated)
+
+The `x402-facilitator` server wires optional `onBeforeSettle` policy when any of
+these are set (unset = no behavior change):
+
+| Variable | Effect |
+|----------|--------|
+| `SETTLE_MAX_AMOUNT` | Abort if settle amount (atomic units) exceeds this integer |
+| `SETTLE_PAYTO_ALLOWLIST` | Comma-separated payTo allowlist |
+| `SETTLE_NETWORK_ALLOWLIST` | Comma-separated network / CAIP-2 allowlist |
+| `SETTLE_PREFLIGHT_URL` | `POST` JSON `{ payTo, network, amount, asset? }`; body `{ allow: false }` or HTTP 403 aborts |
+| `SETTLE_PREFLIGHT_TIMEOUT_MS` | Preflight timeout (default `500`) |
+| `SETTLE_PREFLIGHT_FAIL_OPEN` | `"true"` to allow settle if preflight request fails (default fail-closed) |
+
+No third-party package is required; point `SETTLE_PREFLIGHT_URL` at any policy host.
 
 ## API Reference
 
