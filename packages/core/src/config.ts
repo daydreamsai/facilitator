@@ -24,6 +24,31 @@ dotenv.config();
 export const PORT = parseInt(process.env.PORT || "8090", 10);
 
 // ============================================================================
+// Settlement Configuration
+// ============================================================================
+
+/**
+ * How long to wait for a settlement transaction's receipt before giving up on reading it.
+ *
+ * Unbounded by default in viem, which is the wrong default here: a transaction that sticks in
+ * the mempool -- underpriced, or queued behind an earlier stuck nonce -- would hold the request
+ * open indefinitely while the caller's own HTTP timeout expired underneath it. The caller then
+ * learns nothing, and the facilitator is still waiting on a receipt nobody is listening for.
+ *
+ * Giving up is not the same as the payment failing. Past this bound the settlement returns
+ * `settlement_receipt_unavailable` **with its transaction hash**, which says the outcome is
+ * unknown and hands back the means to find it later.
+ *
+ * Sized so it expires before a typical caller does rather than after: a caller that has already
+ * timed out cannot use the answer, and holding the connection open past that point only
+ * consumes a socket.
+ */
+export const SETTLEMENT_RECEIPT_TIMEOUT_MS = parseInt(
+  process.env.SETTLEMENT_RECEIPT_TIMEOUT_MS || "45000",
+  10
+);
+
+// ============================================================================
 // CDP Configuration (preferred signer)
 // ============================================================================
 

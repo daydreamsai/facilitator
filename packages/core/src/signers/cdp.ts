@@ -5,6 +5,7 @@
  */
 
 import type { CdpClient, EvmServerAccount } from "@coinbase/cdp-sdk";
+import { SETTLEMENT_RECEIPT_TIMEOUT_MS } from "../config.js";
 import { toFacilitatorEvmSigner, type FacilitatorEvmSigner } from "@x402/evm";
 import {
   createPublicClient,
@@ -331,10 +332,14 @@ export function createCdpEvmSigner(config: CdpSignerConfig): FacilitatorEvmSigne
      * Wait for a transaction to be mined
      */
     waitForTransactionReceipt: async (args: { hash: Hex }) => {
+      // retryCount/retryDelay govern RPC request retries, not how long the receipt is waited
+      // for -- without an explicit timeout that wait is unbounded. See
+      // SETTLEMENT_RECEIPT_TIMEOUT_MS.
       return publicClient.waitForTransactionReceipt({
         hash: args.hash,
         retryCount: 3,
         retryDelay: 5000,
+        timeout: SETTLEMENT_RECEIPT_TIMEOUT_MS,
       });
     },
   });
