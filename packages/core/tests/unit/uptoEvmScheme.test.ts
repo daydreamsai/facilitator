@@ -680,6 +680,60 @@ describe("UptoEvmScheme", () => {
         expect(result.errorReason).toBe("invalid_transaction_state");
       });
 
+      it("keeps the transaction hash when the receipt cannot be read", async () => {
+        // The transfer is already in the mempool by the time the receipt lookup fails, so the
+        // money has very likely moved. Returning no hash here would leave the caller with
+        // nothing to reconcile or refund against -- the outcome is unknown, not failed.
+        const writeContractMock = mock()
+          .mockImplementationOnce(() =>
+            Promise.resolve("0xpermittx" as `0x${string}`)
+          )
+          .mockImplementationOnce(() =>
+            Promise.resolve("0xtransfertx" as `0x${string}`)
+          );
+
+        mockSigner = createMockSigner({
+          writeContract: writeContractMock,
+          waitForTransactionReceipt: mock(() =>
+            Promise.reject(new Error("HTTP request failed"))
+          ),
+        });
+        scheme = new UptoEvmScheme(mockSigner);
+
+        const result = await scheme.settle(
+          createValidPayload(),
+          createValidRequirements()
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.errorReason).toBe("settlement_receipt_unavailable");
+        expect(result.transaction).toBe("0xtransfertx");
+      });
+
+      it("returns no hash when the broadcast itself never happened", async () => {
+        // The mirror case: nothing left this process, so there is no transaction to name and
+        // no money has moved. The two must stay distinguishable to a caller.
+        const writeContractMock = mock()
+          .mockImplementationOnce(() =>
+            Promise.resolve("0xpermittx" as `0x${string}`)
+          )
+          .mockImplementationOnce(() =>
+            Promise.reject(new Error("Transfer failed"))
+          );
+
+        mockSigner = createMockSigner({ writeContract: writeContractMock });
+        scheme = new UptoEvmScheme(mockSigner);
+
+        const result = await scheme.settle(
+          createValidPayload(),
+          createValidRequirements()
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.transaction).toBe("");
+        expect(result.errorReason).not.toBe("settlement_receipt_unavailable");
+      });
+
       it("returns transaction_failed when transferFrom throws", async () => {
         const writeContractMock = mock()
           .mockImplementationOnce(() =>
