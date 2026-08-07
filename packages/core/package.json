@@ -1,6 +1,6 @@
 {
   "name": "@daydreamsai/facilitator",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "x402 Payment Facilitator - Verify and settle x402 payments with custom signers",
   "type": "module",
   "main": "./dist/lib.js",
