@@ -182,6 +182,31 @@ function createSignerFromAccount(
     transport: rpcUrl ? http(rpcUrl) : http(),
   }).extend(publicActions);
 
+  // One signer is one key, and a key has one nonce sequence. viem resolves the nonce at send
+  // time from the chain's pending count, so two broadcasts started before either has landed
+  // both read the same number, build a transaction at it, and the loser is rejected with
+  // `nonce too low` or `replacement transaction underpriced`. Nothing above this layer
+  // prevents that: a facilitator settles whenever a request arrives, and two payers paying at
+  // the same moment is ordinary rather than exceptional.
+  //
+  // Serialising broadcasts per signer makes the collision impossible instead of merely
+  // unlikely. It deliberately covers only the send, not the receipt wait: the nonce is
+  // consumed when the transaction is accepted into the mempool, so the next send may start as
+  // soon as the previous one has a hash, and holding the queue through confirmation would
+  // collapse throughput for no extra safety.
+  //
+  // A rejected broadcast must not poison the queue, so the tail swallows outcomes and the
+  // next call runs either way.
+  let broadcastQueue: Promise<unknown> = Promise.resolve();
+  const serializeBroadcast = <T>(broadcast: () => Promise<T>): Promise<T> => {
+    const result = broadcastQueue.then(broadcast, broadcast);
+    broadcastQueue = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  };
+
   return toFacilitatorEvmSigner({
     getCode: (args: { address: `0x${string}` }) => client.getCode(args),
     address: account.address,
@@ -210,12 +235,14 @@ function createSignerFromAccount(
       functionName: string;
       args: readonly unknown[];
     }) =>
-      client.writeContract({
-        ...args,
-        args: args.args || [],
-      }),
+      serializeBroadcast(() =>
+        client.writeContract({
+          ...args,
+          args: args.args || [],
+        })
+      ),
     sendTransaction: (args: { to: `0x${string}`; data: `0x${string}` }) =>
-      client.sendTransaction(args),
+      serializeBroadcast(() => client.sendTransaction(args)),
     waitForTransactionReceipt: (args: { hash: `0x${string}` }) =>
       client.waitForTransactionReceipt(args),
   });
