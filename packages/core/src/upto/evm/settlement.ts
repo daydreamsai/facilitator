@@ -161,15 +161,39 @@ export async function settleUptoPayment(
     }
   }
 
-  // Step 2: Execute transferFrom
+  // Step 2: Execute transferFrom.
+  //
+  // The broadcast and the wait for its receipt are separate concerns and must fail
+  // differently. Broadcasting can fail before anything leaves this process, in which case no
+  // money has moved and there is no transaction to name. Waiting can fail after the transfer
+  // is already in the mempool -- a dropped RPC connection, a receipt slower than the client's
+  // timeout -- and that is not the payment failing. It is the payment's outcome being unknown
+  // to us, while the transfer very likely lands moments later.
+  //
+  // Reporting the second as a plain failure with `transaction: ""` was losing the only handle
+  // anyone had on money that had already moved: the caller records no payment reference, so
+  // the transfer cannot afterwards be found, reconciled, or refunded. The hash is therefore
+  // returned even when the receipt is not, so an unknown outcome stays recoverable.
+  let tx: `0x${string}`;
   try {
-    const tx = await signer.writeContract({
+    tx = await signer.writeContract({
       address: erc20Address,
       abi: erc20Abi,
       functionName: "transferFrom",
       args: [payer, getAddress(requirements.payTo), totalSpent],
     });
+  } catch (error) {
+    console.error("Failed to broadcast upto settlement:", error);
+    return {
+      success: false,
+      errorReason: mapTransferErrorReason(error),
+      transaction: "",
+      network: payload.accepted.network,
+      payer,
+    };
+  }
 
+  try {
     const receipt = await signer.waitForTransactionReceipt({ hash: tx });
     if (receipt.status !== "success") {
       return {
@@ -188,11 +212,17 @@ export async function settleUptoPayment(
       payer,
     };
   } catch (error) {
-    console.error("Failed to settle upto payment:", error);
+    // Broadcast, outcome unknown. Deliberately not mapped through
+    // mapTransferErrorReason: that reads revert text to explain why a transfer was rejected,
+    // and nothing here has been rejected -- the chain has not answered yet.
+    console.error(
+      "Upto settlement was broadcast but its receipt could not be read:",
+      { hash: tx, error: errorSummary(error) }
+    );
     return {
       success: false,
-      errorReason: mapTransferErrorReason(error),
-      transaction: "",
+      errorReason: "settlement_receipt_unavailable",
+      transaction: tx,
       network: payload.accepted.network,
       payer,
     };
