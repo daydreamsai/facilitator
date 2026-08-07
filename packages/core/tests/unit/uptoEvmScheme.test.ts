@@ -710,6 +710,41 @@ describe("UptoEvmScheme", () => {
         expect(result.transaction).toBe("0xtransfertx");
       });
 
+      it("treats a receipt timeout as an unknown outcome, not a failure", async () => {
+        // viem raises WaitForTransactionReceiptTimeoutError once the bound in
+        // SETTLEMENT_RECEIPT_TIMEOUT_MS elapses. That is the case the bound exists to produce,
+        // and it must land in the same branch as any other unreadable receipt: the transfer is
+        // in the mempool and may still mine, so the hash is what makes it recoverable.
+        const writeContractMock = mock()
+          .mockImplementationOnce(() =>
+            Promise.resolve("0xpermittx" as `0x${string}`)
+          )
+          .mockImplementationOnce(() =>
+            Promise.resolve("0xtransfertx" as `0x${string}`)
+          );
+
+        mockSigner = createMockSigner({
+          writeContract: writeContractMock,
+          waitForTransactionReceipt: mock(() =>
+            Promise.reject(
+              new Error(
+                "Timed out while waiting for transaction with hash \"0xtransfertx\" to be confirmed."
+              )
+            )
+          ),
+        });
+        scheme = new UptoEvmScheme(mockSigner);
+
+        const result = await scheme.settle(
+          createValidPayload(),
+          createValidRequirements()
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.errorReason).toBe("settlement_receipt_unavailable");
+        expect(result.transaction).toBe("0xtransfertx");
+      });
+
       it("returns no hash when the broadcast itself never happened", async () => {
         // The mirror case: nothing left this process, so there is no transaction to name and
         // no money has moved. The two must stay distinguishable to a caller.

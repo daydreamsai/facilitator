@@ -364,6 +364,14 @@ curl -H "x-wallet-address: 0xYourWalletAddress" \
 
 \*Required when CDP credentials are not configured.
 
+**Settlement**
+
+| Variable                        | Required | Default | Description                                                                 |
+| ------------------------------- | -------- | ------- | --------------------------------------------------------------------------- |
+| `SETTLEMENT_RECEIPT_TIMEOUT_MS` | No       | `45000` | How long to wait for a settlement receipt before reporting an unknown outcome |
+
+Past this bound a settlement returns `settlement_receipt_unavailable` **with its transaction hash**, rather than waiting indefinitely. That is not the payment failing — the transfer is in the mempool and may still mine — so the hash is returned to make it recoverable. Set it below the timeout your own callers use: an answer that arrives after the caller has given up cannot be acted on.
+
 **Starknet Paymaster (Exact Scheme)**
 
 | Variable                           | Required | Default | Description                                      |

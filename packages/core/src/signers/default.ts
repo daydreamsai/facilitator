@@ -13,6 +13,8 @@ import {
 } from "@x402/svm";
 import { createWalletClient, defineChain, http, publicActions, type Chain } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
+
+import { SETTLEMENT_RECEIPT_TIMEOUT_MS } from "../config.js";
 import {
   abstract,
   abstractTestnet,
@@ -243,7 +245,13 @@ function createSignerFromAccount(
       ),
     sendTransaction: (args: { to: `0x${string}`; data: `0x${string}` }) =>
       serializeBroadcast(() => client.sendTransaction(args)),
+    // Bounded on purpose -- viem waits indefinitely by default, which outlives every caller
+    // and leaves a request open on a receipt nobody is waiting for. See
+    // SETTLEMENT_RECEIPT_TIMEOUT_MS.
     waitForTransactionReceipt: (args: { hash: `0x${string}` }) =>
-      client.waitForTransactionReceipt(args),
+      client.waitForTransactionReceipt({
+        ...args,
+        timeout: SETTLEMENT_RECEIPT_TIMEOUT_MS,
+      }),
   });
 }
