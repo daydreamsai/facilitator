@@ -71,13 +71,83 @@ export interface SvmSignerConfig {
   schemes?: SvmSchemeType[];
 }
 
+/**
+ * Abort settlement/verification by returning this from before-hooks.
+ * Matches the `@x402/core` facilitator contract:
+ *   onBeforeSettle(ctx) => void | { abort: true, reason: string }
+ */
+export type FacilitatorHookAbort = {
+  abort: true;
+  reason: string;
+};
+
+/** Recover a failed verify/settle by returning a synthetic result. */
+export type FacilitatorHookRecover<T> = {
+  recovered: true;
+  result: T;
+};
+
+/**
+ * Structural payment context for lifecycle hooks.
+ * Declared without hard-coupling to every `@x402/core` release shape; the live
+ * facilitator passes at least `paymentPayload` + `requirements`.
+ */
+export interface FacilitatorHookPaymentContext {
+  paymentPayload?: {
+    accepted?: {
+      payTo?: string;
+      network?: string;
+      amount?: string;
+      asset?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  requirements?: {
+    payTo?: string;
+    network?: string;
+    amount?: string;
+    asset?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export type FacilitatorBeforeVerifyHook = (
+  ctx: FacilitatorHookPaymentContext
+) => Promise<void | FacilitatorHookAbort>;
+
+export type FacilitatorAfterVerifyHook = (
+  ctx: FacilitatorHookPaymentContext & { result?: unknown }
+) => Promise<void>;
+
+export type FacilitatorOnVerifyFailureHook = (
+  ctx: FacilitatorHookPaymentContext & { error?: Error }
+) => Promise<void | FacilitatorHookRecover<unknown>>;
+
+export type FacilitatorBeforeSettleHook = (
+  ctx: FacilitatorHookPaymentContext
+) => Promise<void | FacilitatorHookAbort>;
+
+export type FacilitatorAfterSettleHook = (
+  ctx: FacilitatorHookPaymentContext & { result?: unknown }
+) => Promise<void>;
+
+export type FacilitatorOnSettleFailureHook = (
+  ctx: FacilitatorHookPaymentContext & { error?: Error }
+) => Promise<void | FacilitatorHookRecover<unknown>>;
+
 export interface FacilitatorHooks {
-  onBeforeVerify?: (ctx: unknown) => Promise<void>;
-  onAfterVerify?: (ctx: unknown) => Promise<void>;
-  onVerifyFailure?: (ctx: unknown) => Promise<void>;
-  onBeforeSettle?: (ctx: unknown) => Promise<void>;
-  onAfterSettle?: (ctx: unknown) => Promise<void>;
-  onSettleFailure?: (ctx: unknown) => Promise<void>;
+  onBeforeVerify?: FacilitatorBeforeVerifyHook;
+  onAfterVerify?: FacilitatorAfterVerifyHook;
+  onVerifyFailure?: FacilitatorOnVerifyFailureHook;
+  /**
+   * Runs before on-chain settlement. Return `{ abort: true, reason }` to block
+   * the settle (x402 core honors this; do not rely on throw-only).
+   */
+  onBeforeSettle?: FacilitatorBeforeSettleHook;
+  onAfterSettle?: FacilitatorAfterSettleHook;
+  onSettleFailure?: FacilitatorOnSettleFailureHook;
 }
 
 export interface FacilitatorConfig {
@@ -111,6 +181,9 @@ export interface FacilitatorConfig {
  *     schemes: ["exact", "upto"],
  *   }],
  *   hooks: {
+ *     onBeforeSettle: async (ctx) => {
+ *       // Return { abort: true, reason } to block settlement.
+ *     },
  *     onAfterSettle: async (ctx) => analytics.track("settlement", ctx),
  *   },
  * });
@@ -119,24 +192,25 @@ export interface FacilitatorConfig {
 export function createFacilitator(config: FacilitatorConfig): x402Facilitator {
   const facilitator = new x402Facilitator();
 
-  // Register lifecycle hooks
+  // Register lifecycle hooks (x402 core: before-hooks may return { abort, reason })
   if (config.hooks?.onBeforeVerify) {
-    facilitator.onBeforeVerify(config.hooks.onBeforeVerify);
+    // Cast: structural types match runtime; @x402/core pin may lag exported hook generics.
+    facilitator.onBeforeVerify(config.hooks.onBeforeVerify as never);
   }
   if (config.hooks?.onAfterVerify) {
-    facilitator.onAfterVerify(config.hooks.onAfterVerify);
+    facilitator.onAfterVerify(config.hooks.onAfterVerify as never);
   }
   if (config.hooks?.onVerifyFailure) {
-    facilitator.onVerifyFailure(config.hooks.onVerifyFailure);
+    facilitator.onVerifyFailure(config.hooks.onVerifyFailure as never);
   }
   if (config.hooks?.onBeforeSettle) {
-    facilitator.onBeforeSettle(config.hooks.onBeforeSettle);
+    facilitator.onBeforeSettle(config.hooks.onBeforeSettle as never);
   }
   if (config.hooks?.onAfterSettle) {
-    facilitator.onAfterSettle(config.hooks.onAfterSettle);
+    facilitator.onAfterSettle(config.hooks.onAfterSettle as never);
   }
   if (config.hooks?.onSettleFailure) {
-    facilitator.onSettleFailure(config.hooks.onSettleFailure);
+    facilitator.onSettleFailure(config.hooks.onSettleFailure as never);
   }
 
   // Register EVM signers and their schemes
