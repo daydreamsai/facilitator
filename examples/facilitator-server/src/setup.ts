@@ -30,6 +30,10 @@ import {
   SVM_PRIVATE_KEY,
   CDP_ACCOUNT_NAME,
 } from "@daydreamsai/facilitator/config";
+import {
+  buildStarknetConfigs,
+  type StarknetConfig,
+} from "./starknet-config.js";
 
 type EvmSignerConfig = FacilitatorConfig["evmSigners"] extends
   | (infer T)[]
@@ -37,11 +41,6 @@ type EvmSignerConfig = FacilitatorConfig["evmSigners"] extends
   ? T
   : never;
 type SvmSignerConfig = FacilitatorConfig["svmSigners"] extends
-  | (infer T)[]
-  | undefined
-  ? T
-  : never;
-type StarknetConfig = FacilitatorConfig["starknetConfigs"] extends
   | (infer T)[]
   | undefined
   ? T
@@ -60,29 +59,7 @@ async function createDefaultSigners(): Promise<{
   starknetConfigs: StarknetConfig[];
 }> {
   const networkSetups = getNetworkSetups();
-  const starknetNetworkSetups = getStarknetNetworkSetups();
-
-  const starknetConfigs: StarknetConfig[] = [];
-  for (const network of starknetNetworkSetups) {
-    if (!network.rpcUrl) {
-      console.warn(`⚠️  No RPC URL for ${network.name} - skipping`);
-      continue;
-    }
-    if (!network.paymasterEndpoint) {
-      console.warn(`⚠️  No paymaster endpoint for ${network.name} - skipping`);
-      continue;
-    }
-
-    starknetConfigs.push({
-      network: network.caip as StarknetConfig["network"],
-      rpcUrl: network.rpcUrl,
-      paymasterEndpoint: network.paymasterEndpoint,
-      ...(network.paymasterApiKey
-        ? { paymasterApiKey: network.paymasterApiKey }
-        : {}),
-      sponsorAddress: network.sponsorAddress,
-    });
-  }
+  const starknetConfigs = buildStarknetConfigs(getStarknetNetworkSetups());
 
   if (USE_CDP) {
     // CDP Signer (preferred)

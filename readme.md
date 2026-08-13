@@ -276,6 +276,30 @@ bun dev
 curl http://localhost:8090/supported
 ```
 
+### Facilitator Server (Starknet Opt-in)
+
+Starknet is disabled by default. Enable it explicitly with `STARKNET_NETWORKS`.
+
+```bash
+cd examples/facilitator-server
+
+PORT=8090 \
+BEARER_TOKEN=local-dev-token \
+EVM_PRIVATE_KEY=0x... \
+STARKNET_NETWORKS=starknet-mainnet,starknet-sepolia \
+STARKNET_RPC_URL_STARKNET_MAINNET=https://starknet-mainnet.example.com \
+STARKNET_RPC_URL_STARKNET_SEPOLIA=https://starknet-sepolia.example.com \
+STARKNET_PAYMASTER_ENDPOINT_STARKNET_MAINNET=https://starknet.paymaster.avnu.fi \
+STARKNET_PAYMASTER_ENDPOINT_STARKNET_SEPOLIA=https://starknet.paymaster.avnu.fi \
+STARKNET_PAYMASTER_API_KEY=your-avnu-api-key \
+STARKNET_SPONSOR_ADDRESS=0xyour-sponsor-address \
+bun run dev
+```
+
+`STARKNET_SPONSOR_ADDRESS` can be set globally as above or per-network with
+`STARKNET_SPONSOR_ADDRESS_STARKNET_MAINNET` and
+`STARKNET_SPONSOR_ADDRESS_STARKNET_SEPOLIA`.
+
 ### One-Click Deploy (Railway)
 
 Deploy your own facilitator instance to Railway with one click:
