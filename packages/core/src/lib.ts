@@ -28,3 +28,11 @@ export {
   type NetworkId,
   type FacilitatorHooks,
 } from "./factory.js";
+
+// Log redaction for RPC URLs, request bodies and configured secrets
+export {
+  collectSecretsFromEnv,
+  formatForLog,
+  installLogRedaction,
+  redactSecrets,
+} from "./logging/redact.js";

@@ -11,7 +11,16 @@ import {
   type FacilitatorRpcConfig,
   type FacilitatorSvmSigner,
 } from "@x402/svm";
-import { createWalletClient, defineChain, http, publicActions, type Chain } from "viem";
+import {
+  createWalletClient,
+  defineChain,
+  http,
+  nonceManager as defaultNonceManager,
+  publicActions,
+  type Chain,
+  type NonceManager,
+  type Transport,
+} from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 
 import { SETTLEMENT_RECEIPT_TIMEOUT_MS } from "../config.js";
@@ -136,9 +145,14 @@ export function createPrivateKeyEvmSigner(
   }
 
   const normalizedKey = key.startsWith("0x") ? key : `0x${key}`;
-  const account = privateKeyToAccount(normalizedKey as `0x${string}`);
+  // Nonces are assigned locally and in sequence. Reading the pending count from the RPC on
+  // every send is not safe behind a load-balanced endpoint: the node answering may not yet
+  // have seen the transaction just broadcast, and hands back a nonce that is already used.
+  const account = privateKeyToAccount(normalizedKey as `0x${string}`, {
+    nonceManager: defaultNonceManager,
+  });
 
-  return createSignerFromAccount(account, chain, rpcUrl);
+  return createSignerFromAccount(account, chain, rpcUrl ? http(rpcUrl) : http());
 }
 
 export interface PrivateKeySvmSignerConfig {
@@ -170,18 +184,41 @@ export async function createPrivateKeySvmSigner(
   return toFacilitatorSvmSigner(signer, config.rpcConfig);
 }
 
+const NONCE_ERROR_PATTERNS = [
+  "nonce too low",
+  "replacement transaction underpriced",
+  "already known",
+  "nonce has already been used",
+  "invalid nonce",
+];
+
+export function isNonceError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 8; depth++) {
+    const e = current as { message?: unknown; details?: unknown; shortMessage?: unknown; cause?: unknown };
+    const text = [e.message, e.details, e.shortMessage]
+      .filter((part): part is string => typeof part === "string")
+      .join(" ")
+      .toLowerCase();
+    if (NONCE_ERROR_PATTERNS.some((pattern) => text.includes(pattern))) return true;
+    current = e.cause;
+  }
+  return false;
+}
+
 /**
- * Create a FacilitatorEvmSigner from an account and chain config
+ * Create a FacilitatorEvmSigner from an account and chain config. Exported for tests only;
+ * not part of the package's public surface.
  */
-function createSignerFromAccount(
+export function createSignerFromAccount(
   account: PrivateKeyAccount,
   chain: Chain,
-  rpcUrl?: string
+  transport: Transport
 ): FacilitatorEvmSigner {
   const client = createWalletClient({
     account,
     chain,
-    transport: rpcUrl ? http(rpcUrl) : http(),
+    transport,
   }).extend(publicActions);
 
   // One signer is one key, and a key has one nonce sequence. viem resolves the nonce at send
@@ -199,9 +236,25 @@ function createSignerFromAccount(
   //
   // A rejected broadcast must not poison the queue, so the tail swallows outcomes and the
   // next call runs either way.
+  //
+  // A nonce error means the local sequence and the chain disagree (a transaction sent from
+  // elsewhere, or one dropped from the mempool). Resetting makes the next send resync from
+  // the chain instead of repeating the same mistake; this send still fails to its caller.
+  const nonces: NonceManager | undefined = account.nonceManager;
+  const guarded = async <T>(broadcast: () => Promise<T>): Promise<T> => {
+    try {
+      return await broadcast();
+    } catch (error) {
+      if (nonces && isNonceError(error)) {
+        nonces.reset({ address: account.address, chainId: chain.id });
+      }
+      throw error;
+    }
+  };
   let broadcastQueue: Promise<unknown> = Promise.resolve();
   const serializeBroadcast = <T>(broadcast: () => Promise<T>): Promise<T> => {
-    const result = broadcastQueue.then(broadcast, broadcast);
+    const run = () => guarded(broadcast);
+    const result = broadcastQueue.then(run, run);
     broadcastQueue = result.then(
       () => undefined,
       () => undefined
