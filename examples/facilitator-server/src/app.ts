@@ -140,6 +140,9 @@ export function createApp(config: AppConfig) {
       logger({
         autoLogging: true,
         level: "info",
+        // pino's default destination writes to fd 1 directly, bypassing the redacting
+        // stdout wrapper installed at startup.
+        stream: process.stdout,
       })
     )
     .use(

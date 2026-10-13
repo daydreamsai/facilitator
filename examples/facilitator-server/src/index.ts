@@ -17,6 +17,7 @@
  * - BEARER_TOKENS: Optional comma-separated bearer token list (overrides BEARER_TOKEN)
  */
 
+import "./redact-logs.js";
 import pg from "pg";
 import { defaultSigners } from "./setup.js";
 import { createFacilitator } from "@daydreamsai/facilitator";
