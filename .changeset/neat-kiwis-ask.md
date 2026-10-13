@@ -1,5 +1,0 @@
----
-"@daydreamsai/facilitator": patch
----
-
-init
